@@ -1,0 +1,6 @@
+-- Apply these policies when deploying to Supabase and exposing tables through PostgREST.
+-- The FastAPI service already enforces organization scoping and RBAC; Supabase RLS is defense in depth.
+-- ALTER TABLE dim_organizations ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY tenant_isolation ON dim_organizations
+-- USING (id = (auth.jwt() ->> 'organization_id')::text);
+-- Repeat tenant-aware policies for child tables through their organization/site relationships.

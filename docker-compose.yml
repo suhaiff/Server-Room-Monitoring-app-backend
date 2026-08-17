@@ -1,0 +1,107 @@
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: vtab
+      POSTGRES_USER: vtab
+      POSTGRES_PASSWORD: vtab
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vtab"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports: ["5433:5432"]
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    ports: ["1883:1883"]
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-vtabminio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-vtabminiosecret}
+    volumes: ["minio_data:/data"]
+    ports: ["9000:9000", "9001:9001"]
+  backend:
+    build: ./backend
+    env_file: .env
+    command: sh -c "python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    volumes: ["./backend:/app"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+      mosquitto: {condition: service_started}
+      ai-service: {condition: service_started}
+    ports: ["8000:8000"]
+  mqtt-worker:
+    build: ./backend
+    env_file: .env
+    command: python -m app.mqtt.consumer
+    volumes: ["./backend:/app"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      mosquitto: {condition: service_started}
+  ai-service:
+    build: ./ai_service
+    environment:
+      MODEL_DIR: /models
+    volumes: ["ai_models:/models"]
+    ports: ["8001:8001"]
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
+    depends_on: [backend]
+    ports: ["5173:80"]
+  simulator-api:
+    build: ./simulator
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      DEVICE_ID: 00000000-0000-0000-0000-000000000101
+    depends_on: [mosquitto]
+    ports: ["8010:8010"]
+  simulator-ui:
+    build: ./simulator_ui
+    depends_on: [simulator-api, software-lab]
+    ports: ["5174:80"]
+  software-lab:
+    build: ./software_lab
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+    depends_on:
+      mosquitto: {condition: service_started}
+      mqtt-worker: {condition: service_started}
+    expose: ["8011"]
+  simulator-background:
+    build: ./simulator
+    profiles: ["background-simulator"]
+    command: python simulate_hardware.py
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      DEVICE_ID: 00000000-0000-0000-0000-000000000101
+      INTERVAL_SECONDS: 3
+    depends_on: [mosquitto]
+  prometheus:
+    image: prom/prometheus:latest
+    volumes: ["./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml"]
+    ports: ["9090:9090"]
+  grafana:
+    image: grafana/grafana:latest
+    volumes: ["grafana_data:/var/lib/grafana"]
+    ports: ["3000:3000"]
+volumes:
+  postgres_data:
+  minio_data:
+  ai_models:
+  grafana_data:

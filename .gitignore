@@ -1,0 +1,47 @@
+# Frontend is maintained in a separate repository
+/frontend/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node
+node_modules/
+dist/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Database / local data
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Logs
+*.log
+
+# Local Docker data
+docker-data/

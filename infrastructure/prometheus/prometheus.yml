@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: vtab-backend
+    static_configs:
+      - targets: ["backend:8000"]
+  - job_name: vtab-ai
+    static_configs:
+      - targets: ["ai-service:8001"]
