@@ -1,4 +1,82 @@
-# VTAB Sentinel
+
+# 🛡️ VTAB Sentinel — Backend
+
+<p align="center">
+  <strong>IoT Telemetry, MQTT Ingestion & AI Operations Platform</strong>
+</p>
+
+<p align="center">
+  A production-ready backend for receiving IoT telemetry,
+  processing device events, storing sensor data, generating alerts,
+  and integrating AI-powered analysis.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white" />
+  <img src="https://img.shields.io/badge/TimescaleDB-Enabled-FDB515" />
+  <img src="https://img.shields.io/badge/MQTT-Mosquitto-3C5280" />
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" />
+</p>
+
+---
+
+## 📌 Overview
+
+VTAB Sentinel Backend is the core processing layer of the VTAB Sentinel
+IoT monitoring platform.
+
+It provides:
+
+- REST APIs
+- Device management
+- Telemetry ingestion
+- MQTT processing
+- Device health tracking
+- Event management
+- Alert processing
+- AI integration
+- Authentication
+- Database persistence
+- Operational monitoring
+
+The backend is designed around an event-driven telemetry pipeline.
+
+---
+
+# 🏗️ System Architecture
+
+
+                         IoT Device
+                             │
+                             │ MQTT
+                             ▼
+                    ┌─────────────────┐
+                    │    Mosquitto    │
+                    │   MQTT Broker   │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │   MQTT Worker   │
+                    └────────┬────────┘
+                             │
+               ┌─────────────┼─────────────┐
+               │             │             │
+               ▼             ▼             ▼
+          PostgreSQL        Alerts          AI
+          /TimescaleDB                    Service
+               │                           │
+               └─────────────┬─────────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │   FastAPI API   │
+                    └────────┬────────┘
+                             │
+                             ▼
+                       Web Frontend
 
 Developer-ready reference implementation of the four-phase **VTAB Sentinel AI Server Room Monitoring System** described in the supplied architecture PDF.
 
