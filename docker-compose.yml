@@ -39,6 +39,7 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
       mosquitto: {condition: service_started}
+      minio: {condition: service_started}
       ai-service: {condition: service_started}
     ports: ["8000:8000"]
   mqtt-worker:
@@ -67,7 +68,8 @@ services:
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
       DEVICE_ID: 00000000-0000-0000-0000-000000000101
-    depends_on: [mosquitto]
+      BACKEND_URL: http://backend:8000/api/v1
+    depends_on: [mosquitto, backend]
     ports: ["8010:8010"]
   simulator-ui:
     build: ./simulator_ui

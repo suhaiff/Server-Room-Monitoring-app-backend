@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+ <defs>
+  <linearGradient id="shield" x1="18" y1="12" x2="78" y2="84" gradientUnits="userSpaceOnUse"><stop stop-color="#35D9EF"/><stop offset="1" stop-color="#2EE6C5"/></linearGradient>
+  <linearGradient id="core" x1="34" y1="29" x2="64" y2="67"><stop stop-color="#7AF5FF"/><stop offset="1" stop-color="#2878FF"/></linearGradient>
+ </defs>
+ <path d="M48 7 78 18v24c0 21-11.9 36.3-30 47C29.9 78.3 18 63 18 42V18L48 7Z" fill="#071A28" stroke="url(#shield)" stroke-width="5" stroke-linejoin="round"/>
+ <path d="M48 24v12M29 35h11l8 8 8-8h11M31 57h10l7-7 7 7h10M48 57v14" stroke="url(#core)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+ <circle cx="48" cy="43" r="8" fill="#071A28" stroke="#E6F4FF" stroke-width="4"/>
+ <circle cx="48" cy="43" r="3" fill="#2EE6C5"/>
+ <circle cx="29" cy="35" r="3" fill="#35D9EF"/><circle cx="67" cy="35" r="3" fill="#35D9EF"/>
+ <circle cx="31" cy="57" r="3" fill="#2878FF"/><circle cx="65" cy="57" r="3" fill="#2878FF"/>
+ <circle cx="48" cy="24" r="3" fill="#35D9EF"/><circle cx="48" cy="71" r="3" fill="#2EE6C5"/>
+</svg>

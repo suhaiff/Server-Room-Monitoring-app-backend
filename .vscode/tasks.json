@@ -1,0 +1,9 @@
+{
+  "version":"2.0.0",
+  "tasks":[
+    {"label":"VTAB: Start everything","type":"shell","command":"docker compose up --build","isBackground":true,"problemMatcher":[]},
+    {"label":"VTAB: Start simulator","type":"shell","command":"docker compose --profile simulator up simulator","isBackground":true,"problemMatcher":[]},
+    {"label":"VTAB: Run backend tests","type":"shell","command":"docker compose run --rm backend pytest -q","problemMatcher":[]},
+    {"label":"VTAB: Stop everything","type":"shell","command":"docker compose down","problemMatcher":[]}
+  ]
+}

@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     mqtt_port: int = 1883
     mqtt_topic: str = "devices/+/telemetry"
     ai_service_url: str = "http://localhost:8001"
+    agent_provider: str = "local"
+    agent_model: str = "evidence-first-2.0"
+    llm_api_key: str = ""
+    voice_provider: str = "browser"
     cors_origins: str = "http://localhost:5173"
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "vtabminio"
@@ -40,4 +44,6 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
 

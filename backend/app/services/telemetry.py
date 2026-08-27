@@ -23,8 +23,17 @@ def ingest(db: Session, payload: TelemetryIn) -> dict:
     db.add_all([raw, clean]); db.flush()
     anomalies = []
     for kind, raw_value in payload.readings.items():
-        sensor = db.scalar(select(models.DimSensor).where(models.DimSensor.device_id == device.id, models.DimSensor.sensor_type == kind))
-        db.add(models.RawDataDetail(raw_header_id=raw.id, sensor_id=sensor.id if sensor else None, raw_value=str(raw_value), raw_unit=UNITS.get(kind, ""), raw_payload={"value": raw_value}))
+        source = payload.sources.get(kind, {})
+        requested_sensor_id = source.get("sensor_id")
+        if requested_sensor_id:
+            sensor = db.get(models.DimSensor, requested_sensor_id)
+            if not sensor or sensor.device_id != device.id or sensor.sensor_type != kind:
+                raise ValueError(f"Sensor {requested_sensor_id} is not registered as {kind} on this device")
+        else:
+            sensor = db.scalars(select(models.DimSensor).where(
+                models.DimSensor.device_id == device.id, models.DimSensor.sensor_type == kind
+            ).order_by(models.DimSensor.created_at)).first()
+        db.add(models.RawDataDetail(raw_header_id=raw.id, sensor_id=sensor.id if sensor else None, raw_value=str(raw_value), raw_unit=UNITS.get(kind, ""), raw_payload={"value": raw_value, "source": source, "device_health": payload.health}))
         numeric = float(raw_value) if not isinstance(raw_value, str) or raw_value.replace(".", "", 1).isdigit() else None
         low, high = RANGES.get(kind, (-1e30, 1e30))
         quality = "valid" if numeric is not None and low <= numeric <= high else "invalid"
@@ -35,3 +44,6 @@ def ingest(db: Session, payload: TelemetryIn) -> dict:
         db.add(models.DeviceHealth(device_id=device.id, status="online", rssi=payload.health.get("rssi"), uptime_seconds=payload.health.get("uptime_seconds"), recorded_at=timestamp))
     db.commit()
     return {"core_event_id": event.id, "telemetry_header_id": clean.id, "accepted": len(payload.readings), "validation_errors": anomalies}
+
+
+

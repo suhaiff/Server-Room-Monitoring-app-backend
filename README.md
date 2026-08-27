@@ -1,5 +1,20 @@
 # VTAB Sentinel
 
+> Version 2.4.0 adds a closed-loop AI cooling/HVAC simulator, excessive-cooling protection, adaptive temperature safe bands and end-to-end MQTT/incident/recovery validation. See [docs/HVAC_CLOSED_LOOP_SIMULATION_2.4.0.md](docs/HVAC_CLOSED_LOOP_SIMULATION_2.4.0.md).
+
+> Version 2.3.1 closes the residual 13:24 review items: duplicate Overview temperature, Copilot oval-row alignment, unequal Reports panels and the light-mode root canvas/AI rendering defect. See [docs/VIDEO_FEEDBACK_2026-08-24_RESIDUAL_SIGNOFF_2.3.1.md](docs/VIDEO_FEEDBACK_2026-08-24_RESIDUAL_SIGNOFF_2.3.1.md).
+
+
+> Version 2.3.0 is the final video sign-off release: requested Overview flow, configurable modules, management-grade Reports, circular Copilot with New chat, corrected alignment and a dimensional light theme rebuilt from scratch. See [docs/VIDEO_FEEDBACK_2026-08-24_FINAL_SIGNOFF_2.3.0.md](docs/VIDEO_FEEDBACK_2026-08-24_FINAL_SIGNOFF_2.3.0.md).
+
+
+> Version 2.2.0 implements the complete 12:15 video acceptance redesign, lifecycle dashboards, actionable Copilot, optimized 3D status lighting and a white theme rebuilt from scratch. See [docs/VIDEO_FEEDBACK_2026-08-24_ACCEPTANCE_REDESIGN_2.2.0.md](docs/VIDEO_FEEDBACK_2026-08-24_ACCEPTANCE_REDESIGN_2.2.0.md).
+
+
+> Version 2.1.2 fixes the login logo overflow and restores scrolling on short/mobile screens. See [docs/VIDEO_FEEDBACK_2026-08-24_LOGIN_VIEWPORT_FIX_2.1.2.md](docs/VIDEO_FEEDBACK_2026-08-24_LOGIN_VIEWPORT_FIX_2.1.2.md).
+
+> Version 2.1.1: the latest fourth-video-review fixes and validation record are in [docs/VIDEO_FEEDBACK_2026-08-24_FOURTH_REVIEW_2.1.1.md](docs/VIDEO_FEEDBACK_2026-08-24_FOURTH_REVIEW_2.1.1.md).
+
 Developer-ready reference implementation of the four-phase **VTAB Sentinel AI Server Room Monitoring System** described in the supplied architecture PDF.
 
 ## What is included
@@ -26,6 +41,12 @@ State-aware recovery voice, incident date controls and the independent software 
 Named AI fault observability, unified simulator hosting, centered empty tickets and CSV log export from the fifth review are documented in [docs/VIDEO_REVIEW_FIXES_V9.md](docs/VIDEO_REVIEW_FIXES_V9.md).
 
 Linear AI dependency propagation and modern internal scrollbars from the sixth review are documented in [docs/VIDEO_REVIEW_FIXES_V10.md](docs/VIDEO_REVIEW_FIXES_V10.md).
+
+The 2.0.3 second video review fixes—adaptive environmental policy, AI Operations crash regression, complete light theme, 360° digital twin, room-wide emergency visualization, corrected logo and Operations Copilot—are documented in [docs/VIDEO_FEEDBACK_2026-08-24_SECOND_REVIEW.md](docs/VIDEO_FEEDBACK_2026-08-24_SECOND_REVIEW.md).
+
+The corrected Manual/Auto threshold contract is documented in [docs/THRESHOLD_MANUAL_AUTO_CORRECTION_2.0.4.md](docs/THRESHOLD_MANUAL_AUTO_CORRECTION_2.0.4.md).
+
+The 2.1.0 WebGL room rebuild, pagination, AI Operations reorganization, Copilot correction and light-theme acceptance results are documented in [docs/VIDEO_FEEDBACK_2026-08-24_THIRD_REVIEW_3D_REBUILD.md](docs/VIDEO_FEEDBACK_2026-08-24_THIRD_REVIEW_3D_REBUILD.md).
 
 ## Fastest local start (recommended)
 
@@ -92,3 +113,19 @@ See `docs/02_LOCAL_SETUP.md` for non-Docker and VS Code instructions.
 ## Configuration placeholders
 
 Local simulation works without cloud accounts. Production requires real values for Supabase/PostgreSQL, S3/MinIO, SMTP/SendGrid, Teams webhook, Jira, ServiceNow, optional OpenAI/Azure OpenAI explanations, TLS certificates and production JWT secrets. See `.env.example` and `docs/09_PLACEHOLDERS.md`.
+
+## ESP32 hardware
+
+For physical sensor wiring, Arduino IDE upload, hybrid hardware/simulation testing, calibration and troubleshooting, see [docs/16_ESP32_HARDWARE_INTEGRATION.md](docs/16_ESP32_HARDWARE_INTEGRATION.md). The component tester opens at http://localhost:5174.
+
+
+Video feedback fixes and the clean hardware retest procedure are documented in [docs/17_VIDEO_FEEDBACK_FIXES.md](docs/17_VIDEO_FEEDBACK_FIXES.md).
+
+
+## Version 2.0
+
+VTAB Sentinel 2.0 adds a protected **AI Manager** workspace with live evidence chat, governed L1/L2/L3 remediation, predictive sensor intelligence, knowledge/runbook APIs and a digital-twin foundation. It preserves the proven MQTT → database → alert/incident pipeline and the independent Test Lab.
+
+Start the complete local platform with `python start_vtab.py` on Windows or `python3 start_vtab.py` on Linux/macOS. Then open `http://localhost:5173` and select **AI Manager**. See `docs/VTAB_SENTINEL_2.0_DEVELOPER_GUIDE.md` for full guidance.
+
+

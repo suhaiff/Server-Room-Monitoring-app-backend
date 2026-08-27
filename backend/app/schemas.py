@@ -19,6 +19,15 @@ class DeviceCreate(ORMModel):
     room_id: str; name: str; hardware_type: str = "Arduino UNO R4 WiFi"; firmware_version: str = "sim-1.0"
 class SensorCreate(ORMModel):
     device_id: str; sensor_type: str; unit: str = ""; min_valid: float | None = None; max_valid: float | None = None
+class ComponentRegistration(ORMModel):
+    sensor_type: str
+    quantity: int = Field(1, ge=1, le=10)
+class DeviceRegistration(ORMModel):
+    name: str = Field(min_length=2, max_length=150)
+    hardware_type: str = "ESP32 WiFi"
+    firmware_version: str = "not-connected"
+    room_id: str | None = None
+    sensor_types: list[str] = Field(default_factory=lambda: ["temperature", "humidity"])
 class UserCreate(ORMModel):
     organization_id: str; email: EmailStr; full_name: str; password: str = Field(min_length=8); role_name: str = "viewer"
 
@@ -27,6 +36,7 @@ class TelemetryIn(ORMModel):
     timestamp: datetime | None = None
     readings: dict[str, float | str | bool]
     health: dict[str, Any] = Field(default_factory=dict)
+    sources: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     @field_validator("readings")
     @classmethod
@@ -63,9 +73,17 @@ class IncidentUpdate(ORMModel):
     note: str = ""
 
 class ThresholdRuleIn(ORMModel):
-    measurement_type: str; operator: str = Field(pattern="^(gt|gte|lt|lte|eq)$"); threshold: float; severity: str = "warning"; enabled: bool = True
+    measurement_type: str
+    operator: str = Field(pattern="^(gt|gte|lt|lte|eq)$")
+    threshold: float
+    severity: str = "warning"
+    enabled: bool = True
+    mode: str = Field(default="manual", pattern="^(manual|auto)$")
 
 class IntegrationRequest(ORMModel):
     provider: str = Field(pattern="^(teams|jira|servicenow|webhook)$")
     incident_id: str
     target_url: str | None = None
+
+
+

@@ -6,16 +6,22 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
 SCENARIOS = {
-    "postgres": ("PostgreSQL / TimescaleDB", "critical", "Simulated database response timeout", "Check database health, connections and storage capacity."),
-    "redis": ("Redis cache", "warning", "Simulated Redis connection failure", "Check Redis availability and background job retries."),
-    "mqtt": ("Mosquitto MQTT", "critical", "Simulated MQTT message backlog", "Inspect broker connections, queue depth and ingestion worker."),
-    "ai_baseline": ("AI baseline model", "critical", "Simulated AI baseline-learning model failure", "Inspect baseline history input and model execution logs."),
-    "ai_anomaly": ("AI anomaly detector", "critical", "Simulated AI anomaly-detection model failure", "Inspect anomaly model inputs, score calculation and execution logs."),
-    "ai_forecast": ("AI forecast model", "critical", "Simulated AI forecasting model failure", "Inspect time-series history, forecast horizon and execution logs."),
-    "ai_risk": ("AI risk engine", "critical", "Simulated AI risk-scoring model failure", "Inspect sensor features, anomaly score and risk policy logs."),
-    "ai_explanation": ("AI explanation model", "critical", "Simulated AI explanation model failure", "Inspect inference results and explanation-generation logs."),
-    "minio": ("MinIO object storage", "warning", "Simulated object storage outage", "Check MinIO health, credentials and storage volume."),
-    "backend": ("FastAPI backend", "critical", "Simulated elevated backend API error rate", "Inspect backend diagnostics, dependencies and recent logs."),
+    "postgres": ("PostgreSQL / TimescaleDB", "critical", "L3", False, "Simulated database response timeout", "Check database health, connections and storage capacity."),
+    "redis": ("Redis cache", "warning", "L1", True, "Simulated Redis connection failure", "Check Redis availability and background job retries."),
+    "mqtt": ("Mosquitto MQTT", "critical", "L2", True, "Simulated MQTT message backlog", "Inspect broker connections, queue depth and ingestion worker."),
+    "ai_baseline": ("AI baseline model", "critical", "L2", True, "Simulated AI baseline-learning model failure", "Inspect baseline history input and model execution logs."),
+    "ai_anomaly": ("AI anomaly detector", "critical", "L2", True, "Simulated AI anomaly-detection model failure", "Inspect anomaly model inputs, score calculation and execution logs."),
+    "ai_forecast": ("AI forecast model", "critical", "L2", True, "Simulated AI forecasting model failure", "Inspect time-series history, forecast horizon and execution logs."),
+    "ai_risk": ("AI risk engine", "critical", "L2", True, "Simulated AI risk-scoring model failure", "Inspect sensor features, anomaly score and risk policy logs."),
+    "ai_explanation": ("AI explanation model", "warning", "L1", True, "Simulated AI explanation model failure", "Inspect inference results and explanation-generation logs."),
+    "minio": ("MinIO object storage", "warning", "L1", True, "Simulated object storage outage", "Check MinIO health, credentials and storage volume."),
+    "backend": ("FastAPI backend", "critical", "L2", True, "Simulated elevated backend API error rate", "Apply the API recovery runbook and verify protected health checks."),
+    "auth": ("Authentication service", "critical", "L2", True, "Simulated protected API authentication failure", "Refresh authentication dependencies and verify protected access."),
+    "notifications": ("Notification delivery", "warning", "L2", True, "Simulated notification queue failure", "Retry notification queue and validate the delivery adapter."),
+    "frontend": ("React dashboard", "warning", "L1", True, "Simulated dashboard API connection failure", "Refresh the data session and verify API connectivity."),
+    "prometheus": ("Prometheus metrics", "warning", "L1", True, "Simulated metrics scrape failure", "Reload target discovery and verify metric collection."),
+    "grafana": ("Grafana monitoring", "warning", "L1", True, "Simulated Grafana datasource failure", "Reload the datasource and verify its health query."),
+    "simulator": ("Simulator transport", "warning", "L1", True, "Simulated simulator receipt timeout", "Reconnect simulator transport and validate receipt flow."),
 }
 app = FastAPI(title="VTAB Software Test Console", version="1.0")
 receipts, pending = {}, {}
@@ -39,7 +45,10 @@ def on_message(c, userdata, message):
         if correlation:
             receipts[correlation] = data
             item = pending.get(correlation)
-            if item: state[item[0]] = "active" if item[1] == "trigger" else "pending_closure"
+            if item:
+                state[item[0]] = "active" if item[1] == "trigger" else ("normal" if data.get("status") in {"auto_remediated", "already_recovered"} else "pending_closure")
+            elif data.get("status") == "auto_remediated" and data.get("component") in state:
+                state[data["component"]] = "normal"
     except Exception:
         pass
 
@@ -61,22 +70,24 @@ def health(): return {"status": "healthy" if connected else "waiting", "mqtt_con
 
 @app.get("/api/status")
 def status():
-    return {"mqtt_connected": connected, "components": [{"key": k, "label": v[0], "state": state[k]} for k,v in SCENARIOS.items()]}
+    return {"mqtt_connected": connected, "components": [{"key": k, "label": v[0], "level": v[2], "automatic": v[3], "state": state[k]} for k,v in SCENARIOS.items()]}
 
 @app.post("/api/faults/{key}/{action}")
 def fault(key: str, action: str):
     if key not in SCENARIOS or action not in {"trigger", "recover"}: raise HTTPException(404, "Unknown test action")
     if not connected: raise HTTPException(503, "MQTT is not connected yet")
-    label, severity, message, recommendation = SCENARIOS[key]
+    label, severity, level, automatic, message, recommendation = SCENARIOS[key]
     correlation = str(uuid.uuid4())
     payload = {"component": key, "label": label, "severity": severity, "message": message,
-               "recommendation": recommendation, "action": action, "correlation_id": correlation,
+               "recommendation": recommendation, "level": level, "automatic": action == "recover" and automatic,
+               "action": action, "correlation_id": correlation,
                "timestamp": datetime.now(timezone.utc).isoformat()}
     info = client.publish("platform/faults", json.dumps(payload), qos=1)
     info.wait_for_publish(timeout=3)
     pending[correlation] = (key, action)
     state[key] = "processing"
-    return {"status": "published", "correlation_id": correlation, "action": action}
+    return {"status": "published", "correlation_id": correlation, "action": action,
+            "level": level, "automatic_recovery": action == "trigger" and automatic, "owner": "backend AI remediation worker"}
 
 @app.get("/api/receipts/{correlation}")
 def receipt(correlation: str):
@@ -87,9 +98,9 @@ HTML = r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport
 <style>html{scrollbar-width:thin;scrollbar-color:#2f7188 #03111d}html::-webkit-scrollbar{width:9px;height:9px}html::-webkit-scrollbar-track{background:#03111d}html::-webkit-scrollbar-thumb{background:linear-gradient(#278197,#205369);border:2px solid #03111d;border-radius:10px}html::-webkit-scrollbar-thumb:hover{background:#35bfd1}pre{scrollbar-width:thin;scrollbar-color:#2f7188 #04121d}</style>
 <body><main class="shell"><header class="top"><div><div class="eyebrow">VTAB SENTINEL · UNIFIED SIMULATOR</div><h1>Software Reliability Test Console</h1><div class="sub">Controlled fault injection for named backend services and individual AI models</div></div><div id="mqtt" class="badge">MQTT CONNECTING</div></header>
 <section class="pipeline"><div class="step"><b>01 Select fault</b><span>Developer console</span></div><div class="arrow">→</div><div class="step"><b>02 Publish test event</b><span>MQTT platform/faults</span></div><div class="arrow">→</div><div class="step"><b>03 Persist evidence</b><span>Database event + alert</span></div><div class="arrow">→</div><div class="step"><b>04 Operator response</b><span>Dashboard ticket + voice</span></div></section>
-<div class="note">Safe simulation mode: these controls create realistic fault events and tickets, but never stop Docker containers or damage stored data.</div><section id="grid" class="grid"></section><section class="log"><b>Processing receipt</b><pre id="log">Waiting for a test...</pre></section></main>
+<div class="note">Controlled reliability mode: L1/L2 tests run safe automatic diagnosis, repair and verification. L3 preserves evidence and requires human approval. No real container is stopped and no data is damaged.</div><section id="grid" class="grid"></section><section class="log"><b>Processing receipt</b><pre id="log">Waiting for a test...</pre></section></main>
 <script>const icons={postgres:'DB',redis:'R',mqtt:'MQ',minio:'S3',backend:'API'};let labels={};
-async function refresh(){let d=await fetch('api/status').then(r=>r.json());document.querySelector('#mqtt').textContent=d.mqtt_connected?'MQTT CONNECTED':'MQTT WAITING';document.querySelector('#mqtt').className='badge '+(d.mqtt_connected?'ok':'');let g=document.querySelector('#grid');g.innerHTML=d.components.map(x=>{labels[x.key]=x.label;let icon=icons[x.key]||(x.key.startsWith('ai_')?'AI':'SYS');return `<article class="card ${x.state}"><div class="icon">${icon}</div><div class="state">${x.state.replace('_',' ')}</div><h2>${x.label}</h2><div class="desc">Inject a controlled ${x.label} interruption. Its exact model or service name will appear in the alert, ticket, voice message and operations diagnostics.</div><div class="buttons"><button onclick="act('${x.key}','trigger')" ${x.state==='processing'?'disabled':''}>Simulate failure</button><button class="recover" onclick="act('${x.key}','recover')" ${x.state==='normal'||x.state==='processing'?'disabled':''}>Simulate recovery</button></div></article>`}).join('')}
+async function refresh(){let d=await fetch('api/status').then(r=>r.json());document.querySelector('#mqtt').textContent=d.mqtt_connected?'MQTT CONNECTED':'MQTT WAITING';document.querySelector('#mqtt').className='badge '+(d.mqtt_connected?'ok':'');let g=document.querySelector('#grid');g.innerHTML=d.components.map(x=>{labels[x.key]=x.label;let icon=icons[x.key]||(x.key.startsWith('ai_')?'AI':'SYS');let policy=x.automatic?'AI auto-repair + verification':'Human approval required';return `<article class="card ${x.state}"><div class="icon">${icon}</div><div class="state">${x.level} · ${x.state.replaceAll('_',' ')}</div><h2>${x.label}</h2><div class="desc"><b>${policy}</b><br>Creates a real ticket, records diagnosis and exercises the approved recovery runbook.</div><div class="buttons"><button onclick="act('${x.key}','trigger')" ${x.state!=='normal'?'disabled':''}>Inject ${x.level} failure</button><button class="recover" onclick="act('${x.key}','recover')" ${x.automatic||x.state==='normal'||x.state==='processing'?'disabled':''}>Verify human recovery</button></div></article>`}).join('')}
 async function act(key,action){let r=await fetch(`api/faults/${key}/${action}`,{method:'POST'});let d=await r.json();if(!r.ok){document.querySelector('#log').textContent=d.detail;return}document.querySelector('#log').textContent=`${labels[key]} ${action} published. Waiting for backend receipt...`;refresh();poll(d.correlation_id)}
 async function poll(id){for(let i=0;i<20;i++){await new Promise(r=>setTimeout(r,750));let d=await fetch('api/receipts/'+id).then(r=>r.json());document.querySelector('#log').textContent=JSON.stringify(d,null,2);if(d.status!=='processing'){refresh();return}}document.querySelector('#log').textContent+='\nReceipt timeout: inspect MQTT worker logs.'}refresh();setInterval(refresh,4000)</script></body></html>'''
 

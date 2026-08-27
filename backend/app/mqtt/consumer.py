@@ -1,5 +1,5 @@
 """Long-running MQTT consumer. Topic: devices/{device_uuid}/telemetry."""
-import json, logging, time
+import json, logging, threading, time
 from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 from app.core.config import settings
@@ -17,6 +17,22 @@ def on_connect(client, userdata, flags, reason_code, properties):
     client.subscribe(settings.mqtt_topic, qos=1)
     client.subscribe("platform/faults", qos=1)
 
+def schedule_automatic_recovery(client, payload, initial_result):
+    """Run a bounded recovery from the worker that owns the ticket lifecycle."""
+    def recover():
+        time.sleep(8)
+        recovery = {**payload, "action": "recover", "automatic": True,
+                    "correlation_id": f"{payload.get('correlation_id', 'fault')}-auto"}
+        try:
+            with SessionLocal() as db:
+                result = process_platform_fault(db, recovery)
+            result.update({"correlation_id": recovery["correlation_id"], "component": payload.get("component"), "processed_at": datetime.now(timezone.utc).isoformat()})
+            client.publish(f"platform/faults/receipts/{recovery['correlation_id']}", json.dumps(result), qos=1)
+            log.info("Automatic %s remediation finished for %s", initial_result.get("level"), payload.get("component"))
+        except Exception:
+            log.exception("Automatic remediation failed for %s", payload.get("component"))
+    threading.Thread(target=recover, daemon=True, name=f"remediate-{payload.get('component', 'fault')}").start()
+
 def on_message(client, userdata, message):
     try:
         data = json.loads(message.payload.decode())
@@ -27,9 +43,11 @@ def on_message(client, userdata, message):
             if correlation_id:
                 result.update({"correlation_id": correlation_id, "processed_at": datetime.now(timezone.utc).isoformat()})
                 client.publish(f"platform/faults/receipts/{correlation_id}", json.dumps(result), qos=1)
+            if data.get("action", "trigger") == "trigger" and result.get("automatic") and result.get("status") == "fault_recorded":
+                schedule_automatic_recovery(client, data, result)
             log.info("Processed software fault %s: %s", data.get("component"), result.get("status"))
             return
-        payload = TelemetryIn(device_id=data.get("device_id", message.topic.split("/")[1]), timestamp=data.get("timestamp"), readings=data["readings"], health=data.get("health", {}))
+        payload = TelemetryIn(device_id=data.get("device_id", message.topic.split("/")[1]), timestamp=data.get("timestamp"), readings=data["readings"], health=data.get("health", {}), sources=data.get("sources", {}))
         with SessionLocal() as db:
             result = ingest(db, payload)
             alert_ids = evaluate(db, result["core_event_id"], payload.readings)
@@ -55,3 +73,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

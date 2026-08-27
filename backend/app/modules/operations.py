@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import csv
 from io import StringIO
 from time import perf_counter
@@ -12,32 +12,69 @@ from sqlalchemy.orm import Session
 from app import models
 from app.core.database import get_db
 from app.core.security import current_user, require_roles
-from app.schemas import IncidentUpdate, IntegrationRequest
+from app.schemas import IncidentUpdate, IntegrationRequest, ThresholdRuleIn
 from app.services.integrations import dispatch
+from app.services.alerts import adaptive_rule_details
 from app.core.config import settings
 
 router = APIRouter(tags=["Operations"])
 
+@router.get("/settings/thresholds")
+def get_thresholds(db: Session=Depends(get_db), user=Depends(current_user)):
+    rows=db.scalars(select(models.ThresholdRule).where(models.ThresholdRule.organization_id==user.organization_id).order_by(models.ThresholdRule.measurement_type)).all()
+    return [{"id":r.id,"measurement_type":r.measurement_type,"operator":r.operator,"threshold":r.threshold,"severity":r.severity,"enabled":r.enabled,**(adaptive_rule_details(db,user.organization_id,r.measurement_type) or {})} for r in rows]
+
+@router.put("/settings/thresholds/{measurement_type}")
+def save_threshold(measurement_type: str, body: ThresholdRuleIn, db: Session=Depends(get_db), user=Depends(require_roles("admin","facility_manager","engineer"))):
+    allowed={"temperature","humidity","water_leak","door_open","smoke"}
+    if measurement_type not in allowed or body.measurement_type != measurement_type:
+        raise HTTPException(422,"Measurement type must match a supported sensor")
+    rule=db.scalar(select(models.ThresholdRule).where(models.ThresholdRule.organization_id==user.organization_id,models.ThresholdRule.measurement_type==measurement_type))
+    if not rule:
+        rule=models.ThresholdRule(organization_id=user.organization_id,measurement_type=measurement_type);db.add(rule)
+    rule.operator=body.operator;rule.threshold=body.threshold;rule.severity=body.severity;rule.enabled=body.enabled
+    config=db.scalar(select(models.SystemConfiguration).where(models.SystemConfiguration.organization_id==user.organization_id,models.SystemConfiguration.key=="threshold_modes"))
+    if not config:
+        config=models.SystemConfiguration(organization_id=user.organization_id,key="threshold_modes",value={});db.add(config)
+    modes=dict(config.value or {})
+    modes[measurement_type]=body.mode if measurement_type in {"temperature","humidity"} else "manual"
+    config.value=modes
+    db.commit();db.refresh(rule)
+    return {**{column.name:getattr(rule,column.name) for column in rule.__table__.columns},**(adaptive_rule_details(db,user.organization_id,measurement_type) or {})}
 @router.get("/alerts")
 def alerts(db: Session = Depends(get_db), user=Depends(current_user)):
     rows = db.execute(
-        select(models.AlertHeader, models.AlertDetail, models.CoreEvent, models.DimDevice, models.DimRoom)
+        select(models.AlertHeader, models.AlertDetail, models.CoreEvent, models.DimDevice,
+               models.DimRoom, models.IncidentHeader)
         .join(models.AlertDetail, models.AlertDetail.alert_id == models.AlertHeader.id)
         .join(models.CoreEvent, models.CoreEvent.id == models.AlertHeader.core_event_id)
         .outerjoin(models.DimDevice, models.DimDevice.id == models.CoreEvent.device_id)
         .outerjoin(models.DimRoom, models.DimRoom.id == models.CoreEvent.room_id)
+        .outerjoin(models.IncidentHeader, models.IncidentHeader.alert_id == models.AlertHeader.id)
         .order_by(desc(models.AlertHeader.created_at)).limit(500)
     ).all()
-    return [{
-        "id": alert.id, "core_event_id": alert.core_event_id,
-        "ai_analysis_id": alert.ai_analysis_id, "alert_type": alert.alert_type,
-        "severity": alert.severity, "status": alert.status,
-        "message": detail.message, "recommendation": detail.recommendation,
-        "trigger_value": detail.trigger_value, "threshold_value": detail.threshold_value,
-        "device_name": device.name if device else ("Platform Services" if event.source_system == "software-test-lab" else "Unknown device"),
-        "room_name": room.name if room else "Unknown room",
-        "event_timestamp": event.event_timestamp, "created_at": alert.created_at,
-    } for alert, detail, event, device, room in rows]
+    result=[]
+    for alert, detail, event, device, room, incident in rows:
+        history=[]
+        if incident:
+            actions=db.scalars(select(models.IncidentDetail).where(
+                models.IncidentDetail.incident_id==incident.id
+            ).order_by(models.IncidentDetail.action_timestamp)).all()
+            history=[{"id":item.id,"action_type":item.action_type,"description":item.action_description,
+                      "note":item.note,"timestamp":item.action_timestamp,
+                      "resolution_note":item.resolution_note} for item in actions]
+        result.append({
+            "id":alert.id,"core_event_id":alert.core_event_id,"ai_analysis_id":alert.ai_analysis_id,
+            "alert_type":alert.alert_type,"severity":alert.severity,"status":alert.status,
+            "message":detail.message,"recommendation":detail.recommendation,
+            "trigger_value":detail.trigger_value,"threshold_value":detail.threshold_value,
+            "device_name":device.name if device else ("Platform Services" if event.source_system=="software-test-lab" else "Unknown device"),
+            "room_name":room.name if room else "Unknown room","event_timestamp":event.event_timestamp,
+            "created_at":alert.created_at,"incident_id":incident.id if incident else None,
+            "incident_status":incident.status if incident else None,"resolved_at":incident.resolved_at if incident else None,
+            "history":history,
+        })
+    return result
 
 @router.get("/incidents")
 def incidents(db: Session = Depends(get_db), user=Depends(current_user)):
@@ -79,7 +116,7 @@ def summary(db: Session = Depends(get_db), user=Depends(current_user)):
 @router.post("/admin/test-data/reset")
 def reset_test_data(db: Session=Depends(get_db), user=Depends(require_roles("admin"))):
     """Delete test/event history while preserving users, devices and configuration."""
-    ordered=[models.NotificationDetail,models.NotificationHeader,models.IntegrationDetail,models.IntegrationHeader,models.IncidentDetail,models.IncidentHeader,models.AlertDetail,models.AlertHeader,models.AIPrediction,models.AIAnomaly,models.AIRiskScore,models.AIExplanation,models.AIAnalysisHeader,models.TelemetryDetail,models.TelemetryHeader,models.RawDataDetail,models.RawDataHeader,models.DeviceHealth,models.AuditDetail,models.AuditHeader,models.CoreEvent]
+    ordered=[models.AgentMessage,models.AgentConversation,models.AgentAction,models.SensorIntelligence,models.NotificationDetail,models.NotificationHeader,models.IntegrationDetail,models.IntegrationHeader,models.IncidentDetail,models.IncidentHeader,models.AlertDetail,models.AlertHeader,models.AIPrediction,models.AIAnomaly,models.AIRiskScore,models.AIExplanation,models.AIAnalysisHeader,models.TelemetryDetail,models.TelemetryHeader,models.RawDataDetail,models.RawDataHeader,models.DeviceHealth,models.AuditDetail,models.AuditHeader,models.CoreEvent]
     deleted={}
     for model in ordered:
         result=db.execute(delete(model));deleted[model.__tablename__]=result.rowcount or 0
@@ -145,7 +182,45 @@ def diagnostics(db: Session=Depends(get_db), user=Depends(current_user)):
         response=httpx.get(f"{settings.s3_endpoint}/minio/health/live",timeout=3);response.raise_for_status();return "Health endpoint acknowledged"
     check("AI service",ai_check)
     check("MinIO object storage",minio_check)
+    check("FastAPI backend",lambda:"Protected API request and database session are operational")
+    check("Authentication service",lambda:f"Authenticated user {user.id} verified")
+    check("Notification delivery",lambda:{"queued":db.scalar(select(func.count()).select_from(models.NotificationHeader).where(models.NotificationHeader.status=="queued")) or 0})
+    def http_health(url,label):
+        response=httpx.get(url,timeout=2);response.raise_for_status();return f"{label} health endpoint acknowledged"
+    check("React dashboard",lambda:http_health("http://frontend/","Frontend"))
+    check("Prometheus metrics",lambda:http_health("http://prometheus:9090/-/healthy","Prometheus"))
+    check("Grafana monitoring",lambda:http_health("http://grafana:3000/api/health","Grafana"))
+    check("Simulator transport",lambda:http_health("http://simulator-api:8010/health","Simulator"))
+
+    # A controlled test must be visible even though the real dependency remains
+    # online. Overlay every active software-test alert onto its matching card.
+    fault_names={
+        "postgres":"PostgreSQL / TimescaleDB","redis":"Redis","mqtt":"Mosquitto MQTT","minio":"MinIO object storage",
+        "backend":"FastAPI backend","auth":"Authentication service","notifications":"Notification delivery",
+        "frontend":"React dashboard","prometheus":"Prometheus metrics","grafana":"Grafana monitoring","simulator":"Simulator transport",
+        "ai_baseline":"AI service","ai_anomaly":"AI service","ai_forecast":"AI service","ai_risk":"AI service","ai_explanation":"AI service",
+    }
+    active_faults=db.execute(select(models.AlertHeader,models.AlertDetail).join(
+        models.AlertDetail,models.AlertDetail.alert_id==models.AlertHeader.id).where(
+        models.AlertHeader.status=="open",models.AlertHeader.alert_type.like("software_%"))).all()
+    for alert,detail in active_faults:
+        key=alert.alert_type.removeprefix("software_");name=fault_names.get(key)
+        if not name:continue
+        component=next((item for item in components if item["name"]==name),None)
+        if component:
+            component.update({"status":"error","latency_ms":0,"detail":f"CONTROLLED TEST ACTIVE · {detail.message}"})
     analyses=db.scalar(select(func.count()).select_from(models.AIAnalysisHeader)) or 0
     linked_alerts=db.scalar(select(func.count()).select_from(models.AlertHeader).where(models.AlertHeader.ai_analysis_id.is_not(None))) or 0
-    unlinked_events=db.scalar(select(func.count()).select_from(models.CoreEvent).where(models.CoreEvent.has_telemetry.is_(True),models.CoreEvent.has_ai.is_(False))) or 0
-    return {"status":"healthy" if all(c["status"]=="healthy" for c in components) else "degraded","checked_at":datetime.now(timezone.utc),"components":components,"evidence":{"ai_analyses":analyses,"ai_linked_alerts":linked_alerts,"telemetry_events_without_ai":unlinked_events}}
+    now=datetime.now(timezone.utc); grace_cutoff=now-timedelta(seconds=15); live_window=now-timedelta(minutes=5)
+    missing_query=(select(func.count()).select_from(models.CoreEvent)
+        .outerjoin(models.AIAnalysisHeader,models.AIAnalysisHeader.core_event_id==models.CoreEvent.id)
+        .where(models.CoreEvent.has_telemetry.is_(True),models.AIAnalysisHeader.id.is_(None)))
+    processing_backlog=db.scalar(missing_query.where(models.CoreEvent.event_timestamp>=live_window,models.CoreEvent.event_timestamp<=grace_cutoff)) or 0
+    historical_unlinked=db.scalar(missing_query.where(models.CoreEvent.event_timestamp<live_window)) or 0
+    return {"status":"healthy" if all(c["status"]=="healthy" for c in components) else "degraded","checked_at":now,"components":components,
+            "evidence":{"ai_analyses":analyses,"ai_linked_alerts":linked_alerts,"ai_processing_backlog":processing_backlog,
+                        "historical_unlinked_telemetry":historical_unlinked,"processing_grace_seconds":15}}
+
+
+
+

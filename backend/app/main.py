@@ -5,7 +5,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from app.core.config import settings
 from sqlalchemy import text
 from app.core.database import Base, engine
-from app.modules import ai, auth, master_data, operations, telemetry
+from app.modules import agent, ai, auth, master_data, operations, telemetry
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -16,12 +16,17 @@ async def lifespan(_: FastAPI):
             connection.execute(text("SELECT create_hypertable('telemetry_details', 'measurement_timestamp', if_not_exists => TRUE, migrate_data => TRUE)"))
     yield
 
-app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="2.4.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_list, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-for module in (auth, master_data, telemetry, operations, ai):
+for module in (auth, master_data, telemetry, operations, ai, agent):
     app.include_router(module.router, prefix=settings.api_prefix)
 Instrumentator().instrument(app).expose(app)
 
 @app.get("/health", tags=["Platform"])
 def health():
     return {"status": "healthy", "service": "backend", "environment": settings.app_env}
+
+
+
+
+
