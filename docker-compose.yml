@@ -13,7 +13,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-    ports: ["5433:5432"]
+    ports: ["5432:5432"]
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
@@ -57,9 +57,11 @@ services:
     volumes: ["ai_models:/models"]
     ports: ["8001:8001"]
   frontend:
-    build: ./frontend
-    environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:?Set VITE_API_URL in the project .env file}
+        VITE_SIMULATOR_URL: ${VITE_SIMULATOR_URL:?Set VITE_SIMULATOR_URL in the project .env file}
     depends_on: [backend]
     ports: ["5173:80"]
   simulator-api:
@@ -69,10 +71,14 @@ services:
       MQTT_PORT: 1883
       DEVICE_ID: 00000000-0000-0000-0000-000000000101
       BACKEND_URL: http://backend:8000/api/v1
+      SIMULATOR_CORS_ORIGINS: ${SIMULATOR_CORS_ORIGINS:?Set SIMULATOR_CORS_ORIGINS in the project .env file}
     depends_on: [mosquitto, backend]
     ports: ["8010:8010"]
   simulator-ui:
-    build: ./simulator_ui
+    build:
+      context: ./simulator_ui
+      args:
+        VITE_SIMULATOR_API_URL: ${VITE_SIMULATOR_API_URL:?Set VITE_SIMULATOR_API_URL in the project .env file}
     depends_on: [simulator-api, software-lab]
     ports: ["5174:80"]
   software-lab:

@@ -112,7 +112,7 @@ See `docs/02_LOCAL_SETUP.md` for non-Docker and VS Code instructions.
 
 ## Configuration placeholders
 
-Local simulation works without cloud accounts. Production requires real values for Supabase/PostgreSQL, S3/MinIO, SMTP/SendGrid, Teams webhook, Jira, ServiceNow, optional OpenAI/Azure OpenAI explanations, TLS certificates and production JWT secrets. See `.env.example` and `docs/09_PLACEHOLDERS.md`.
+Local simulation works without cloud accounts. Production requires real values for Supabase/PostgreSQL, S3/MinIO, SMTP/SendGrid, Teams webhook, Jira, ServiceNow, optional OpenAI/Azure OpenAI explanations, TLS certificates and production JWT secrets. See `.env.example`, [docs/PRODUCTION_URLS.md](docs/PRODUCTION_URLS.md) and `docs/09_PLACEHOLDERS.md`.
 
 ## ESP32 hardware
 

@@ -3,7 +3,7 @@ import json, os, random, time
 from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 
-host=os.getenv("MQTT_HOST","localhost"); port=int(os.getenv("MQTT_PORT","1883")); device=os.getenv("DEVICE_ID","00000000-0000-0000-0000-000000000101"); interval=float(os.getenv("INTERVAL_SECONDS","3"))
+host=os.getenv("MQTT_HOST","mosquitto"); port=int(os.getenv("MQTT_PORT","1883")); device=os.getenv("DEVICE_ID","00000000-0000-0000-0000-000000000101"); interval=float(os.getenv("INTERVAL_SECONDS","3"))
 client=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"sim-{device[-6:]}")
 while True:
     try:

@@ -9,4 +9,3 @@ __pycache__/
 *.db
 coverage.xml
 .coverage
-VTAB-Sentinel-2.0.zip

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 MQTT_HOST=os.getenv("MQTT_HOST","mosquitto"); MQTT_PORT=int(os.getenv("MQTT_PORT","1883"))
 DEVICE_ID=os.getenv("DEVICE_ID","00000000-0000-0000-0000-000000000101")
 BACKEND_URL=os.getenv("BACKEND_URL","http://backend:8000/api/v1")
+SIMULATOR_CORS_ORIGINS=os.getenv("SIMULATOR_CORS_ORIGINS","")
 SENSORS=("temperature","humidity","water_leak","door_open","smoke")
 client=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,client_id="vtab-multi-device-tester")
 state={"connected":False,"connecting":False,"last_publish_at":None,"published":0,"last_payload":None,"last_hardware_at":None,"latest_hardware_payload":None}
@@ -149,7 +150,7 @@ def hardware_capable(source):
 async def lifespan(_app):
  connect(False);yield;client.loop_stop();client.disconnect()
 app=FastAPI(title="VTAB Multi-device Component Tester",version="5.1.0",lifespan=lifespan)
-app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:5174"],allow_credentials=False,allow_methods=["GET","POST"],allow_headers=["Content-Type"])
+app.add_middleware(CORSMiddleware,allow_origins=[origin.strip() for origin in SIMULATOR_CORS_ORIGINS.split(",") if origin.strip()],allow_credentials=False,allow_methods=["GET","POST"],allow_headers=["Content-Type"])
 client.on_connect=on_connect;client.on_disconnect=on_disconnect;client.on_message=on_message
 
 @app.get("/health")
