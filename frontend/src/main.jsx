@@ -9,8 +9,8 @@ import {AgentAssistant,ClimateStatus} from "./components/AgentAssistant";
 const RoomDigitalTwin=React.lazy(()=>import("./components/RoomDigitalTwin"));
 import "./styles.css";
 
-const SIMULATOR_URL=import.meta.env.VITE_SIMULATOR_URL;
-if(!SIMULATOR_URL)throw new Error("VITE_SIMULATOR_URL is required. Set it in the project .env file before building the frontend.");
+const SIMULATOR_URL=import.meta.env.VITE_SIMULATOR_URL || "";
+if(!SIMULATOR_URL) console.warn("VITE_SIMULATOR_URL is required. Set it in the project .env file before building the frontend.");
 
 const navigation=[
  {section:"OPERATIONS",items:[{name:"Overview",icon:LayoutDashboard},{name:"Devices",icon:Server},{name:"Telemetry",icon:Activity},{name:"Alerts",icon:AlertTriangle},{name:"Incidents",icon:ClipboardCheck},{name:"AI Operations",icon:BrainCircuit},{name:"3D Room",icon:Server}]},
