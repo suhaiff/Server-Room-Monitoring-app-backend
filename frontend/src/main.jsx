@@ -1,8 +1,8 @@
 import React,{useEffect,useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
-import {Activity,AlertTriangle,BellRing,BrainCircuit,CheckCircle2,ClipboardCheck,Cpu,DoorOpen,Droplets,ExternalLink,FileBarChart,LayoutDashboard,LockKeyhole,LogOut,Menu,RefreshCw,Server,Settings,ShieldCheck,SlidersHorizontal,Sun,Moon,Volume2,VolumeX,X} from "lucide-react";
+import {Activity,AlertTriangle,BellRing,BrainCircuit,CheckCircle,CheckCircle2,ChevronRight,ClipboardCheck,Clock,Cpu,DoorOpen,Droplets,ExternalLink,FileBarChart,Globe,LayoutDashboard,Layers,LockKeyhole,LogOut,Mail,MapPin,Menu,Paperclip,RefreshCw,Send,Server,Settings,ShieldCheck,SlidersHorizontal,Sun,Moon,Volume2,VolumeX,X,Eye,EyeOff,Box,Zap} from "lucide-react";
 import {Area,AreaChart,Bar,BarChart,CartesianGrid,Legend,Line,LineChart,ReferenceLine,ResponsiveContainer,Tooltip,XAxis,YAxis} from "recharts";
-import {API_URL,api,login} from "./api";
+import {API_URL,api,login,register as registerApi,verify as verifyApi} from "./api";
 import AITerminal from "./components/AITerminal";
 import {VoiceProvider,useVoice} from "./voice/VoiceProvider";
 import {AgentAssistant,ClimateStatus} from "./components/AgentAssistant";
@@ -13,8 +13,8 @@ const SIMULATOR_URL=import.meta.env.VITE_SIMULATOR_URL || "";
 if(!SIMULATOR_URL) console.warn("VITE_SIMULATOR_URL is required. Set it in the project .env file before building the frontend.");
 
 const navigation=[
- {section:"OPERATIONS",items:[{name:"Overview",icon:LayoutDashboard},{name:"Devices",icon:Server},{name:"Telemetry",icon:Activity},{name:"Alerts",icon:AlertTriangle},{name:"Incidents",icon:ClipboardCheck},{name:"AI Operations",icon:BrainCircuit},{name:"3D Room",icon:Server}]},
- {section:"MANAGE",items:[{name:"Reports",icon:FileBarChart},{name:"Settings",icon:SlidersHorizontal},{name:"Administration",icon:Settings}]},
+ {section:"OPERATIONS",items:[{name:"Overview",icon:LayoutDashboard},{name:"Devices",icon:Server},{name:"Telemetry",icon:Activity},{name:"Alerts",icon:AlertTriangle},{name:"Incidents",icon:ClipboardCheck},{name:"AI Operations",icon:BrainCircuit},{name:"3D Room",icon:Box}]},
+ {section:"MANAGE",items:[{name:"Reports",icon:FileBarChart},{name:"Settings",icon:Settings},{name:"Administration",icon:ShieldCheck},{name:"Support",icon:ExternalLink}]},
 ];
 
 const defaultPreferences={voiceRepeatSeconds:10,showClimate:true,showClosureMetric:true,showDeviceMetric:true,showTelemetryMetric:true,showAlertMetric:true,showTicketMetric:true,showTrend:true,showAlertFeed:true,showTodayTickets:true,showHardware:false,showTickets:false,showAiSummary:false,reportLifecycle:true,reportAiPerformance:true,reportSeverity:true,reportHealth:true,reportFindings:true};
@@ -22,23 +22,149 @@ function savedPreferences(){try{return {...defaultPreferences,...JSON.parse(loca
 
 function Login(){
  const [error,setError]=useState("");
- async function submit(e){e.preventDefault();const f=new FormData(e.currentTarget);try{await login(f.get("email"),f.get("password"));location.reload()}catch(x){setError(x.message)}}
- return <main className="login"><form className="login-card" onSubmit={submit}>
-  <div className="login-brand"><img src="/vtab-sentinel-logo.svg" alt="VTAB Sentinel"/><span><b>VTAB Sentinel</b><small>SENSE · REASON · RESOLVE</small></span></div>
-  <div className="login-heading"><small>AI SERVER ROOM MONITORING</small><h1>Server room intelligence</h1><p>Secure operator access</p></div>
-  <label>Email<input name="email" type="email" autoComplete="username" defaultValue="admin@vtab.local"/></label>
-  <label>Password<input name="password" type="password" autoComplete="current-password" defaultValue="Admin123!"/></label>
-  {error&&<div className="error" role="alert">{error}</div>}<button type="submit">Sign in</button>
- </form></main>
+ const [isRegister,setIsRegister]=useState(false);
+ const [showPassword,setShowPassword]=useState(false);
+ const [isVerifying,setIsVerifying]=useState(false);
+ const [pendingEmail,setPendingEmail]=useState("");
+ 
+ async function submit(e){
+  e.preventDefault();
+  const f=new FormData(e.currentTarget);
+  setError("");
+  try{
+   if(isRegister){
+    await registerApi(f.get("name")||"New User", f.get("email"), f.get("password"));
+    setPendingEmail(f.get("email"));
+    setIsVerifying(true);
+   }else{
+    await login(f.get("email"),f.get("password"));
+    location.reload();
+   }
+  }catch(x){
+   let msg = x.message;
+   try { msg = JSON.parse(x.message).detail || x.message; } catch {}
+   setError(msg);
+  }
+ }
+ 
+ async function handleVerify(e){
+  e.preventDefault();
+  const f=new FormData(e.currentTarget);
+  setError("");
+  try{
+   await verifyApi(pendingEmail, f.get("code"));
+   location.reload();
+  }catch(x){
+   let msg = x.message;
+   try { msg = JSON.parse(x.message).detail || x.message; } catch {}
+   setError(msg);
+  }
+ }
+ return <main className="login auth-landscape-page">
+   <div className="auth-landscape-card">
+    <div className="auth-left">
+     <div className="login-brand"><img src="/vtab-sentinel-logo.svg" alt="VTAB Sentinel"/><span><b>VTAB Sentinel</b><small>SENSE · REASON · RESOLVE</small></span></div>
+     <div className="login-heading">
+      <small>AI SERVER ROOM MONITORING</small>
+      <h1>{isRegister ? "Join the Network" : "Server room intelligence"}</h1>
+      <p>{isRegister ? "Create an account for secure operator access to monitoring systems." : "Secure operator access to real-time telemetry and AI operations."}</p>
+     </div>
+    </div>
+    <form className={`auth-right ${isRegister ? 'is-registering' : ''}`} onSubmit={submit}>
+     <h2>{isRegister ? "Create Account" : "Sign In"}</h2>
+     {isRegister && <label className="slide-down auth-label">Full Name<input name="name" type="text" placeholder="John Doe" required={isRegister} className="auth-input"/></label>}
+     <label className="auth-label">Email<input name="email" type="email" autoComplete="username" defaultValue={!isRegister?"admin@vtab.local":""} placeholder="operator@vtab.local" required className="auth-input"/></label>
+     <label className="auth-label">Password
+       <div className="password-wrapper">
+         <input name="password" type={showPassword?"text":"password"} autoComplete="current-password" defaultValue={!isRegister?"Admin123!":""} placeholder="Enter your password" required minLength="8" className="auth-input"/>
+         <button type="button" className="password-toggle" onClick={()=>setShowPassword(!showPassword)}>
+           {showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
+         </button>
+       </div>
+     </label>
+     {error&&<div className="error alert-bounce" role="alert">{error}</div>}
+     <button type="submit" className="auth-btn">{isRegister?"Create Account":"Sign In"}</button>
+     <button type="button" className="auth-toggle-btn" onClick={()=>setIsRegister(!isRegister)}>{isRegister?"Already have an account? Sign in":"Need an account? Register"}</button>
+    </form>
+   </div>
+   {isVerifying && (
+      <div className="verify-overlay">
+        <div className="verify-modal alert-bounce">
+          <ShieldCheck size={48} className="verify-icon"/>
+          <h3>Verify Your Email</h3>
+          <p>We've sent a 6-digit verification code to <b>{pendingEmail}</b>.</p>
+          <form onSubmit={handleVerify}>
+            <input type="text" name="code" placeholder="Enter 6-digit code" maxLength="6" required className="auth-input verify-input"/>
+            {error && <div className="error alert-bounce" role="alert">{error}</div>}
+            <button type="submit" className="auth-btn">Verify & Sign In</button>
+            <button type="button" className="auth-toggle-btn" onClick={()=>setIsVerifying(false)}>Cancel</button>
+          </form>
+        </div>
+      </div>
+    )}
+  </main>
+}
+
+function UserManagement() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  async function loadUsers() {
+    try { setUsers(await api("/auth/users")); } catch(e) { console.error(e); } finally { setLoading(false); }
+  }
+  useEffect(() => { loadUsers(); }, []);
+  
+  async function changeRole(id, role) {
+    await api(`/auth/users/${id}/role`, { method: "PUT", body: JSON.stringify({ role_name: role }) });
+    loadUsers();
+  }
+  async function deleteUser(id) {
+    if(confirm("Delete this user?")) {
+      await api(`/auth/users/${id}`, { method: "DELETE" });
+      loadUsers();
+    }
+  }
+
+  return (
+    <div className="panel user-management-panel">
+      <h2><LockKeyhole/> User Management</h2>
+      <p>Manage system access and roles.</p>
+      {loading ? <p>Loading users...</p> : (
+        <div style={{overflowX:"auto"}}><table className="data-table">
+          <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
+          <tbody>
+            {users.map(u => (
+              <tr key={u.id}>
+                <td>{u.full_name}</td>
+                <td>{u.email}</td>
+                <td>
+                  <select value={u.role} onChange={(e) => changeRole(u.id, e.target.value)} className="role-select">
+                    <option value="viewer">Viewer</option>
+                    <option value="engineer">Engineer</option>
+                    <option value="facility_manager">Facility Manager</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </td>
+                <td>
+                  <button onClick={() => deleteUser(u.id)} className="danger-button small-button">Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      )}
+    </div>
+  );
 }
 
 function App(){
  const [theme,setTheme]=useState(()=>localStorage.getItem("vtab.theme")||"dark");
+ const [currentUser, setCurrentUser] = useState(null);
  const [page,setPage]=useState("Overview"),[summary,setSummary]=useState({}),[telemetry,setTelemetry]=useState([]),[alerts,setAlerts]=useState([]),[incidents,setIncidents]=useState([]),[devices,setDevices]=useState([]),[sensors,setSensors]=useState([]),[loading,setLoading]=useState(false),[menu,setMenu]=useState(false),[lastSync,setLastSync]=useState(null),[preferences,setPreferences]=useState(savedPreferences),[thresholds,setThresholds]=useState([]);
  const {enabled,speaking,lastMessage,toggle,announce,supported}=useVoice();const spoken=useRef(new Set(JSON.parse(sessionStorage.getItem("spokenAlerts")||"[]"))),incidentRef=useRef(incidents),summaryRef=useRef(summary),previousState=useRef(null);incidentRef.current=incidents;summaryRef.current=summary;
  async function loadThresholds(){try{setThresholds(await api("/settings/thresholds"))}catch(e){console.error(e)}}
  async function load(){setLoading(true);try{const [s,t,a,i,d,se]=await Promise.all([api("/reports/summary"),api("/telemetry/latest?limit=250"),api("/alerts"),api("/incidents"),api("/devices"),api("/master/sensors")]);setSummary(s);setTelemetry(t);setAlerts(a);setIncidents(i);setDevices(d);setSensors(se);setLastSync(new Date());const cutoff=Date.now()-45000;const fresh=a.filter(x=>new Date(x.event_timestamp||x.created_at).getTime()>=cutoff&&!spoken.current.has(x.id));const groups=Object.values(fresh.reduce((acc,x)=>{const key=x.core_event_id||x.id;(acc[key]??=[]).push(x);return acc},{}));groups.forEach(group=>{group.forEach(x=>spoken.current.add(x.id));const critical=group.some(x=>x.severity==="critical");const messages=[...new Set(group.map(x=>x.message||x.alert_type.replaceAll("_"," ")))];const actions=[...new Set(group.map(x=>x.recommendation).filter(Boolean))].slice(0,2);announce(`${critical?"Critical server-room incident":"Server-room attention required"}. ${messages.join(" ")} ${actions.length?`Recommended action: ${actions.join(" ")}`:""}`,{priority:critical?"critical":"normal",id:`event-${group[0].core_event_id||group[0].id}`})});sessionStorage.setItem("spokenAlerts",JSON.stringify([...spoken.current].slice(-200)))}catch(e){console.error(e)}finally{setLoading(false)}}
- useEffect(()=>{load();loadThresholds();const timer=setInterval(load,3000);const navigate=e=>setPage(e.detail);window.addEventListener("vtab:navigate",navigate);return()=>{clearInterval(timer);window.removeEventListener("vtab:navigate",navigate)}},[announce]);
+ useEffect(()=>{api("/auth/me").then(setCurrentUser).catch(()=>console.error("Failed to load user"));load();loadThresholds();const timer=setInterval(load,3000);const navigate=e=>setPage(e.detail);window.addEventListener("vtab:navigate",navigate);return()=>{clearInterval(timer);window.removeEventListener("vtab:navigate",navigate)}},[announce]);
  useEffect(()=>{
   const active=incidents.filter(x=>["open","assigned","acknowledged"].includes(x.status));
   const names=[...new Set(active.map(x=>(x.message||x.alert_type||"monitored incident").replace(/^Simulated\s+/i,"").replace(/\.$/,"")))];
@@ -59,7 +185,14 @@ function App(){
  async function resetData(){if(!confirm("Delete all telemetry, alerts, tickets and AI test history? Devices and users will be preserved."))return;await api("/admin/test-data/reset",{method:"POST"});sessionStorage.removeItem("spokenAlerts");spoken.current.clear();await load();alert("Test data cleared. The next records will come from the simulator or hardware.")}
  function switchTheme(){const next=theme==="dark"?"light":"dark";setTheme(next);localStorage.setItem("vtab.theme",next)}
  const state=summary.system_state||((summary.open_alerts||0)>0?"alert":(summary.open_incidents||0)>0?"pending":"healthy");
- return <div data-theme={theme} className={`shell system-${state}`}><aside className={menu?"open":""}><button className="mobile-close" onClick={()=>setMenu(false)}><X/></button><div className="brand"><div><img src="/vtab-sentinel-logo.svg"/></div><b>VTAB <span>SENTINEL</span></b><small>SENSE · REASON · RESOLVE</small></div><div className="sidebar-navigation">{navigation.map(group=><nav key={group.section}><label>{group.section}</label>{group.items.map(({name,icon:Icon})=><button className={page===name?"active":""} onClick={()=>navigate(name)} key={name}><Icon size={17}/><span>{name}</span></button>)}</nav>)}</div><button className="logout" onClick={()=>{localStorage.clear();location.reload()}}><LogOut size={16}/> Sign out</button></aside><main><header><button className="mobile-menu" onClick={()=>setMenu(true)}><Menu/></button><div><small>AI SERVER ROOM MONITORING</small><h1>{page}</h1></div><div className="header-actions"><button className="theme-toggle" onClick={switchTheme} title={theme==="dark"?"Switch to light theme":"Switch to dark theme"} aria-label={theme==="dark"?"Switch to light theme":"Switch to dark theme"}>{theme==="dark"?<Sun/>:<Moon/>}<span>{theme==="dark"?"Light":"Dark"}</span></button><button title="Global setting: applies to every VTAB page" className={`voice-toggle ${enabled?"enabled":""} ${speaking?"speaking":""}`} onClick={toggle}>{enabled?<Volume2 size={17}/>:<VolumeX size={17}/>}<span><b>Voice intelligence</b><small>{!supported?"Not supported":speaking?"Speaking now":enabled?"Enabled system-wide":"Muted system-wide"}</small></span></button><button className="refresh" onClick={load}><RefreshCw size={16} className={loading?"spin":""}/> Refresh</button></div></header><section className={`system-banner ${state}`}>{state==="healthy"?<CheckCircle2/>:<AlertTriangle/>}<div><b>{state==="healthy"?"All monitored conditions are healthy":"Active server-room attention required"}</b><span>{state==="healthy"?"No open alerts or tickets. Monitoring continues in real time.":`${summary.open_incidents||0} open ticket(s) and ${summary.open_alerts||0} active alert(s).`}</span></div></section>
+ return <div data-theme={theme} className={`shell system-${state}`}><aside className={menu?"open":""}><button className="mobile-close" onClick={()=>setMenu(false)}><X/></button><div className="brand"><div><img src="/vtab-sentinel-logo.svg"/></div><b>VTAB <span>SENTINEL</span></b><small>SENSE · REASON · RESOLVE</small></div><nav>
+    {navigation.map(sec=>
+     <div key={sec.section}>
+      <span>{sec.section}</span>
+      {sec.items.filter(item => item.name !== "Administration" || currentUser?.role === "admin").map(item=><button key={item.name} className={page===item.name?"active":""} onClick={()=>setPage(item.name)}><item.icon size={17}/><span>{item.name}</span></button>)}
+     </div>
+    )}
+   </nav><button className="logout" onClick={()=>{localStorage.clear();location.reload()}}><LogOut size={16}/> Sign out</button></aside><main><header><button className="mobile-menu" onClick={()=>setMenu(true)}><Menu/></button><div><small>AI SERVER ROOM MONITORING</small><h1>{page}</h1></div><div className="header-actions"><button className="theme-toggle" onClick={switchTheme} title={theme==="dark"?"Switch to light theme":"Switch to dark theme"} aria-label={theme==="dark"?"Switch to light theme":"Switch to dark theme"}>{theme==="dark"?<Sun/>:<Moon/>}<span>{theme==="dark"?"Light":"Dark"}</span></button><button title="Global setting: applies to every VTAB page" className={`voice-toggle ${enabled?"enabled":""} ${speaking?"speaking":""}`} onClick={toggle}>{enabled?<Volume2 size={17}/>:<VolumeX size={17}/>}<span><b>Voice intelligence</b><small>{!supported?"Not supported":speaking?"Speaking now":enabled?"Enabled system-wide":"Muted system-wide"}</small></span></button><button className="refresh" onClick={load}><RefreshCw size={16} className={loading?"spin":""}/> Refresh</button></div></header><section className={`system-banner ${state}`}>{state==="healthy"?<CheckCircle2/>:<AlertTriangle/>}<div><b>{state==="healthy"?"All monitored conditions are healthy":"Active server-room attention required"}</b><span>{state==="healthy"?"No open alerts or tickets. Monitoring continues in real time.":`${summary.open_incidents||0} open ticket(s) and ${summary.open_alerts||0} active alert(s).`}</span></div></section>
  {speaking&&<div className="voice-now"><div className="voice-wave"><i/><i/><i/><i/></div><div><b>VTAB voice intelligence</b><span>{lastMessage}</span></div><button onClick={toggle}><VolumeX/> Mute globally</button></div>}
  {page==="Overview"&&<OverviewCommandCenter summary={summary} devices={devices} telemetry={telemetry} alerts={alerts} incidents={incidents} chart={chart} thresholds={thresholds} lastSync={lastSync} preferences={preferences} navigate={setPage}/> }
  {page==="Devices"&&<DeviceInventory devices={devices} sensors={sensors} telemetry={telemetry} thresholds={thresholds} onRegistered={load}/>} 
@@ -70,7 +203,11 @@ function App(){
  {page==="3D Room"&&<React.Suspense fallback={<section className="panel twin-loading"><Activity/><b>Loading interactive 3D room…</b></section>}><RoomDigitalTwin devices={devices} sensors={sensors} telemetry={telemetry} thresholds={thresholds} alerts={alerts} incidents={incidents}/></React.Suspense>}
  {page==="Reports"&&<OperationalReports summary={summary} alerts={alerts} incidents={incidents} preferences={preferences}/>} 
  {page==="Settings"&&<ApplicationSettings preferences={preferences} updatePreference={updatePreference} thresholds={thresholds} onSaved={loadThresholds}/>} 
- {page==="Administration"&&<section className="admin-grid"><div className="panel"><Settings/><h2>Clean test workspace</h2><p>Remove telemetry, alerts, tickets and AI results while preserving users, devices and configuration.</p><button className="danger-button" onClick={resetData}><RefreshCw/> Clear all test data</button></div><div className="panel"><LockKeyhole/><h2>System-wide voice policy</h2><p>Voice intelligence is currently <b>{enabled?"enabled":"muted"}</b>. The global header control applies across every page and persists after refresh.</p><button className="primary" onClick={toggle}>{enabled?<VolumeX/>:<Volume2/>}{enabled?"Mute voice system-wide":"Enable voice system-wide"}</button></div><div className="panel test-callout"><ExternalLink/><h2>Unified simulator</h2><p>Hardware/ESP32 and software/AI tests now share one simulator application. Both paths publish through MQTT.</p><a className="primary" href={SIMULATOR_URL} target="_blank" rel="noreferrer"><ExternalLink/> Open unified simulator</a></div></section>}
+ {page==="Support"&&<VTabSquarePromotional/>}
+ {page==="Administration"&&<section className="admin-column-layout">
+  {currentUser?.role === "admin" && <UserManagement />}
+  <div className="panel clean-workspace-card"><Settings/><h2>Clean test workspace</h2><p>Remove telemetry, alerts, tickets and AI results while preserving users, devices and configuration.</p><button className="danger-button" onClick={resetData}><RefreshCw/> Clear all test data</button></div>
+ </section>}
  </main><AgentAssistant/></div>
 }
 
@@ -179,17 +316,150 @@ function AlertFeed({title,rows,onOpen}){const [page,setPage]=useState(1),pageSiz
 function Table({title,rows,columns}){const [page,setPage]=useState(1),pageSize=15,paged=rows.slice((page-1)*pageSize,page*pageSize);useEffect(()=>setPage(1),[rows.length,title]);return <section className="panel paged-table"><div className="section-heading"><div><Activity/><div><h3>{title}</h3><p>Latest validated records · paginated for a stable workspace</p></div></div></div><div className="table-wrap"><table><thead><tr>{columns.map(c=><th key={c}>{c.replaceAll("_"," ")}</th>)}</tr></thead><tbody>{paged.length?paged.map((r,i)=><tr key={r.id||i}>{columns.map(c=><td key={c}>{r[c]===null||r[c]===undefined?"-":c.includes("timestamp")||c.endsWith("_at")?relativeTime(r[c]):String(r[c])}</td>)}</tr>):<tr><td colSpan={columns.length}>No data yet. Use Test Lab to generate sensor readings.</td></tr>}</tbody></table></div><Pagination page={page} setPage={setPage} total={rows.length} pageSize={pageSize}/></section>}
 
 class ErrorBoundary extends React.Component{constructor(props){super(props);this.state={error:null}}static getDerivedStateFromError(error){return{error}}render(){if(this.state.error)return <main className="page-crash"><AlertTriangle/><h1>This view could not be displayed</h1><p>{this.state.error.message}</p><button className="primary" onClick={()=>{this.setState({error:null});location.reload()}}><RefreshCw/> Reload dashboard</button></main>;return this.props.children}}
+
+function VTabSquarePromotional() {
+  const [message, setMessage] = useState('');
+  const [attachment, setAttachment] = useState(null);
+  const [queryStatus, setQueryStatus] = useState(null);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+      setAttachment(null);
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Attachment must be smaller than 5MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setAttachment({ name: file.name, b64: event.target.result });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleQuerySubmit = async (e) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+    setQueryStatus('sending');
+    try {
+      const res = await fetch(`${API_URL}/auth/support-query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: message.trim(),
+          attachment_name: attachment?.name,
+          attachment_b64: attachment?.b64
+        })
+      });
+      if (!res.ok) throw new Error('Failed');
+      setQueryStatus('success');
+      setMessage('');
+      setAttachment(null);
+      setTimeout(() => setQueryStatus(null), 5000);
+    } catch {
+      setQueryStatus('error');
+      setTimeout(() => setQueryStatus(null), 4000);
+    }
+  };
+
+  return (
+    <section className="vsq-page">
+      <div className="vsq-bg-orb vsq-orb-1"></div>
+      <div className="vsq-bg-orb vsq-orb-2"></div>
+      <div className="vsq-bg-orb vsq-orb-3"></div>
+
+      {/* Hero */}
+      <div className="vsq-hero">
+        <div className="vsq-hero-badge">Enterprise AI Innovation</div>
+        <div className="vsq-hero-brand">
+          <div className="vsq-logo-mark"><BrainCircuit size={28}/></div>
+          <div>
+            <h1 className="vsq-hero-title">VTab Square</h1>
+            <p className="vsq-hero-tagline">Sense · Reason · Resolve</p>
+          </div>
+        </div>
+        <p className="vsq-hero-desc">We build enterprise-grade AI solutions that transform raw telemetry into actionable insights — empowering organizations to proactively manage critical infrastructure at scale.</p>
+        <div className="vsq-hero-actions">
+          <a href="https://vtabsquare.com/" target="_blank" rel="noopener noreferrer" className="vsq-cta-primary">
+            <ExternalLink size={14}/> Visit Website
+          </a>
+          <div className="vsq-hero-tags">
+            <span>AI Solutions</span>
+            <span>Digital Twins</span>
+            <span>IoT Monitoring</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Contact + Query */}
+      <div className="vsq-bottom-grid">
+        {/* Contact info */}
+        <div className="vsq-contact-card">
+          <div className="vsq-section-label" style={{marginBottom:'20px'}}><MapPin size={13}/> Contact Us</div>
+          <div className="vsq-contact-items">
+            <div className="vsq-contact-item">
+              <div className="vsq-contact-icon"><MapPin size={15}/></div>
+              <div><b>Headquarters</b><span>Tamil Nadu, India</span></div>
+            </div>
+            <div className="vsq-contact-item">
+              <div className="vsq-contact-icon"><Mail size={15}/></div>
+              <div><b>Email</b><a href="mailto:vitabsquare@gmail.com">vitabsquare@gmail.com</a></div>
+            </div>
+            <div className="vsq-contact-item">
+              <div className="vsq-contact-icon"><Globe size={15}/></div>
+              <div><b>Website</b><a href="https://vtabsquare.com/" target="_blank" rel="noopener noreferrer">vtabsquare.com</a></div>
+            </div>
+            <div className="vsq-contact-item">
+              <div className="vsq-contact-icon"><Clock size={15}/></div>
+              <div><b>Support Hours</b><span>Mon – Fri, 9 AM – 6 PM IST</span></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Query form - message only */}
+        <div className="vsq-query-card">
+          <div className="vsq-section-label" style={{marginBottom:'20px'}}><Send size={13}/> Send a Query</div>
+          {queryStatus === 'success' ? (
+            <div className="vsq-success-msg">
+              <CheckCircle size={36}/>
+              <h4>Message Sent!</h4>
+              <p>Thank you for reaching out. The VTab Square team will get back to you shortly.</p>
+            </div>
+          ) : (
+            <form className="vsq-form" onSubmit={handleQuerySubmit}>
+              <div className="vsq-form-group" style={{flex:1}}>
+                <label>Your Message</label>
+                <textarea
+                  placeholder="Describe your query, project requirements, or how VTab Square can help your organization..."
+                  rows={7}
+                  required
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                  style={{height:'100%', minHeight:'160px'}}
+                ></textarea>
+                <label className="vsq-file-upload">
+                  <input type="file" accept="image/*,.pdf,.doc,.docx" onChange={handleFileChange} />
+                  <Paperclip size={14}/>
+                  {attachment ? (
+                    <span className="vsq-file-name">{attachment.name}</span>
+                  ) : (
+                    <span>Attach screenshot or file (Max 5MB)</span>
+                  )}
+                </label>
+              </div>
+              <button type="submit" className="vsq-submit-btn" disabled={queryStatus === 'sending'}>
+                {queryStatus === 'sending' ? <><RefreshCw size={14} className="spin"/> Sending…</> : <><Send size={14}/> Send Message</>}
+              </button>
+              {queryStatus === 'error' && <p style={{color:'#ff8b9a',fontSize:'11px',textAlign:'center',margin:'8px 0 0'}}>Failed to send. Please try again or email us directly.</p>}
+            </form>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 createRoot(document.getElementById("root")).render(<ErrorBoundary>{localStorage.getItem("token")?<VoiceProvider><App/></VoiceProvider>:<Login/>}</ErrorBoundary>);
-
-
-
-
-
-
-
-
-
-
-
-
 

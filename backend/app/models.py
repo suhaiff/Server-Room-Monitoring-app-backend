@@ -52,6 +52,8 @@ class DimUser(UUIDMixin, Base):
     email: Mapped[str] = mapped_column(String(255), unique=True); full_name: Mapped[str] = mapped_column(String(150))
     password_hash: Mapped[str] = mapped_column(String(255)); role_name: Mapped[str] = mapped_column(String(30), default="viewer")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    verification_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
 class DimRole(UUIDMixin, Base):
     __tablename__ = "dim_roles"

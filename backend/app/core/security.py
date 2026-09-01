@@ -28,11 +28,18 @@ def create_access_token(subject: str, role: str, organization_id: str) -> str:
 
 def current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     from app.models import DimUser
+    from sqlalchemy import text
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
+        role = payload.get("role", "viewer")
     except JWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from exc
+    
+    # Inject RLS session variables
+    db.execute(text("SELECT set_config('app.current_user_id', :uid, true)").bindparams(uid=user_id))
+    db.execute(text("SELECT set_config('app.current_role', :role, true)").bindparams(role=role))
+    
     user = db.scalar(select(DimUser).where(DimUser.id == user_id, DimUser.is_active.is_(True)))
     if not user:
         raise HTTPException(status_code=401, detail="User not found")

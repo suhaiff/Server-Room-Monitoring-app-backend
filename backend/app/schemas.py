@@ -31,6 +31,10 @@ class DeviceRegistration(ORMModel):
 class UserCreate(ORMModel):
     organization_id: str; email: EmailStr; full_name: str; password: str = Field(min_length=8); role_name: str = "viewer"
 
+class UserVerify(ORMModel):
+    email: EmailStr
+    code: str
+
 class TelemetryIn(ORMModel):
     device_id: str
     timestamp: datetime | None = None
