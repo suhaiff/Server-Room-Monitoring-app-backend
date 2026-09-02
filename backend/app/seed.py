@@ -20,7 +20,7 @@ def run():
         db.add(models.DimDevice(id=DEVICE,room_id=ROOM,name="ESP32 Sentinel 01",hardware_type="ESP32 WiFi",firmware_version="esp32-sim-2.0")); db.flush()
         for kind,unit,low,high in [("temperature","C",-20,100),("humidity","%",0,100),("water_leak","bool",0,1),("door_open","bool",0,1),("smoke","bool",0,1)]: db.add(models.DimSensor(device_id=DEVICE,sensor_type=kind,unit=unit,min_valid=low,max_valid=high))
         for name,permissions in [("admin",["*"]),("facility_manager",["manage_devices","manage_incidents"]),("engineer",["manage_incidents"]),("viewer",["read"])]: db.add(models.DimRole(name=name,permissions=permissions))
-        db.add(models.DimUser(organization_id=ORG,email="admin@vtab.local",full_name="VTAB Administrator",password_hash=hash_password("Admin123!"),role_name="admin"))
+        db.add(models.DimUser(organization_id=ORG,email="admin@vtab.local",full_name="VTAB Administrator",password_hash=hash_password("Admin123!"),role_name="admin",is_verified=True))
         for name in ["telemetry","alert","incident","notification","integration","device_health"]: db.add(models.DimEventType(name=name))
         for name in ["mqtt","https","system","ai"]: db.add(models.DimSourceSystem(name=name))
         for name in ["received","processed","open","acknowledged","resolved","failed"]: db.add(models.DimStatus(name=name))
