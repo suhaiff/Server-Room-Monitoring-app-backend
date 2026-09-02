@@ -20,7 +20,8 @@ PENDING_USERS = {}
 @router.post("/token")
 def token(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     from sqlalchemy import text
-    db.execute(text("SELECT set_config('app.is_login', 'true', true)"))
+    if db.bind.dialect.name == "postgresql":
+        db.execute(text("SELECT set_config('app.is_login', 'true', true)"))
     user = db.scalar(select(DimUser).where(DimUser.email == form.username))
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
