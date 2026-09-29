@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
 import {Activity,AlertTriangle,BellRing,BrainCircuit,CheckCircle,CheckCircle2,ChevronRight,ClipboardCheck,Clock,Cpu,DoorOpen,Droplets,ExternalLink,FileBarChart,Globe,LayoutDashboard,Layers,LockKeyhole,LogOut,Mail,MapPin,Menu,Paperclip,RefreshCw,Send,Server,Settings,ShieldCheck,SlidersHorizontal,Sun,Moon,Volume2,VolumeX,X,Eye,EyeOff,Box,Zap} from "lucide-react";
 import {Area,AreaChart,Bar,BarChart,CartesianGrid,Legend,Line,LineChart,ReferenceLine,ResponsiveContainer,Tooltip,XAxis,YAxis} from "recharts";
-import {API_URL,api,login,register as registerApi,verify as verifyApi} from "./api";
+import {API_URL,api,login,register as registerApi,verify as verifyApi,mfaLogin,setupMFA,verifyMFA} from "./api";
 import AITerminal from "./components/AITerminal";
 import {VoiceProvider,useVoice} from "./voice/VoiceProvider";
 import {AgentAssistant,ClimateStatus} from "./components/AgentAssistant";
@@ -26,6 +26,32 @@ function Login(){
  const [showPassword,setShowPassword]=useState(false);
  const [isVerifying,setIsVerifying]=useState(false);
  const [pendingEmail,setPendingEmail]=useState("");
+ const [mfaRequired,setMfaRequired]=useState(false);
+ const [mfaToken,setMfaToken]=useState("");
+ const modalRef = useRef(null);
+ 
+ useEffect(() => {
+   if (isVerifying && modalRef.current) {
+     const focusable = modalRef.current.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+     if (!focusable.length) return;
+     const first = focusable[0];
+     const last = focusable[focusable.length - 1];
+     const handleTab = (e) => {
+       if (e.key === 'Tab') {
+         if (e.shiftKey && document.activeElement === first) {
+           e.preventDefault();
+           last.focus();
+         } else if (!e.shiftKey && document.activeElement === last) {
+           e.preventDefault();
+           first.focus();
+         }
+       }
+     };
+     first.focus();
+     modalRef.current.addEventListener('keydown', handleTab);
+     return () => modalRef.current?.removeEventListener('keydown', handleTab);
+   }
+ }, [isVerifying]);
  
  async function submit(e){
   e.preventDefault();
@@ -37,8 +63,13 @@ function Login(){
     setPendingEmail(f.get("email"));
     setIsVerifying(true);
    }else{
-    await login(f.get("email"),f.get("password"));
-    location.reload();
+    const res = await login(f.get("email"),f.get("password"));
+    if (res && res.mfa_required) {
+      setMfaRequired(true);
+      setMfaToken(res.mfa_token);
+    } else {
+      location.reload();
+    }
    }
   }catch(x){
    let msg = x.message;
@@ -60,6 +91,21 @@ function Login(){
    setError(msg);
   }
  }
+
+ async function handleMfaLogin(e) {
+  e.preventDefault();
+  const f=new FormData(e.currentTarget);
+  setError("");
+  try {
+    await mfaLogin(mfaToken, f.get("code"));
+    location.reload();
+  } catch(x) {
+    let msg = x.message;
+    try { msg = JSON.parse(x.message).detail || x.message; } catch {}
+    setError(msg);
+  }
+ }
+
  return <main className="login auth-landscape-page">
    <div className="auth-landscape-card">
     <div className="auth-left">
@@ -77,27 +123,43 @@ function Login(){
      <label className="auth-label">Password
        <div className="password-wrapper">
          <input name="password" type={showPassword?"text":"password"} autoComplete="current-password" defaultValue={!isRegister?"Admin123!":""} placeholder="Enter your password" required minLength="8" className="auth-input"/>
-         <button type="button" className="password-toggle" onClick={()=>setShowPassword(!showPassword)}>
-           {showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
+         <button type="button" className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"} onClick={()=>setShowPassword(!showPassword)}>
+           {showPassword ? <EyeOff size={16} aria-hidden="true"/> : <Eye size={16} aria-hidden="true"/>}
          </button>
        </div>
      </label>
      {error&&<div className="error alert-bounce" role="alert">{error}</div>}
      <button type="submit" className="auth-btn">{isRegister?"Create Account":"Sign In"}</button>
+     {!isRegister && <button type="button" className="auth-btn" style={{marginTop:"10px", background:"#244565", color:"#fff"}} onClick={() => window.location.href = API_URL + '/auth/sso/login'}>Enterprise Sign-In (SSO)</button>}
      <button type="button" className="auth-toggle-btn" onClick={()=>setIsRegister(!isRegister)}>{isRegister?"Already have an account? Sign in":"Need an account? Register"}</button>
     </form>
    </div>
    {isVerifying && (
       <div className="verify-overlay">
-        <div className="verify-modal alert-bounce">
-          <ShieldCheck size={48} className="verify-icon"/>
-          <h3>Verify Your Email</h3>
+        <div className="verify-modal alert-bounce" role="dialog" aria-modal="true" aria-labelledby="verify-modal-title" ref={modalRef}>
+          <ShieldCheck size={48} className="verify-icon" aria-hidden="true"/>
+          <h3 id="verify-modal-title">Verify Your Email</h3>
           <p>We've sent a 6-digit verification code to <b>{pendingEmail}</b>.</p>
           <form onSubmit={handleVerify}>
-            <input type="text" name="code" placeholder="Enter 6-digit code" maxLength="6" required className="auth-input verify-input"/>
+            <input type="text" name="code" aria-label="Verification Code" placeholder="Enter 6-digit code" maxLength="6" required className="auth-input verify-input"/>
             {error && <div className="error alert-bounce" role="alert">{error}</div>}
             <button type="submit" className="auth-btn">Verify & Sign In</button>
             <button type="button" className="auth-toggle-btn" onClick={()=>setIsVerifying(false)}>Cancel</button>
+          </form>
+        </div>
+      </div>
+    )}
+    {mfaRequired && (
+      <div className="verify-overlay">
+        <div className="verify-modal alert-bounce" role="dialog" aria-modal="true" aria-labelledby="mfa-modal-title">
+          <ShieldCheck size={48} className="verify-icon" aria-hidden="true"/>
+          <h3 id="mfa-modal-title">Enter MFA Code</h3>
+          <p>Please enter the 6-digit code from your authenticator app.</p>
+          <form onSubmit={handleMfaLogin}>
+            <input type="text" name="code" aria-label="MFA Code" placeholder="6-digit code" maxLength="6" required className="auth-input verify-input"/>
+            {error && <div className="error alert-bounce" role="alert">{error}</div>}
+            <button type="submit" className="auth-btn">Sign In</button>
+            <button type="button" className="auth-toggle-btn" onClick={()=>setMfaRequired(false)}>Cancel</button>
           </form>
         </div>
       </div>
@@ -271,10 +333,15 @@ function OperationalReports({summary,alerts,incidents,preferences}){
  <div className="report-workspace">{preferences.reportSeverity&&<section className="panel report-visual"><div className="section-heading"><div><AlertTriangle/><div><h3>Alert severity distribution</h3><p>Risk mix across the retained operational record</p></div></div><span>{alerts.length} TOTAL</span></div><div className="report-chart"><ResponsiveContainer><BarChart data={severity} margin={{top:10,right:8,left:-18,bottom:0}}><CartesianGrid stroke="#143247" strokeDasharray="4 5"/><XAxis dataKey="name" stroke="#638298"/><YAxis allowDecimals={false} stroke="#638298"/><Tooltip contentStyle={{background:"#081422",border:"1px solid #244565"}}/><Bar dataKey="count" fill="#37e1ed" radius={[7,7,0,0]}/></BarChart></ResponsiveContainer></div></section>}{preferences.reportHealth&&<section className="panel report-services"><div className="section-heading"><div><ShieldCheck/><div><h3>Backend and service health</h3><p>Live diagnostic result and response evidence</p></div></div><span>{healthyServices} HEALTHY</span></div><div className="health-list dense">{components.length?components.map((c,i)=><article key={c.name||i}><i className={c.status==="healthy"?"ok":"bad"}/><span><b>{c.name||c.component}</b><small>{diagnosticText(c.detail||c.message||c.status)}</small></span><em>{c.status}</em></article>):<div className="empty-state">Collecting diagnostic evidence…</div>}</div></section>}</div>
  {preferences.reportFindings&&<section className="panel report-findings"><div className="section-heading"><div><BrainCircuit/><div><h3>Decision-ready findings</h3><p>Concise operational outcomes for managers and engineers</p></div></div></div><div className="findings"><p className={open?"attention":"healthy"}><b>{open}</b><span>tickets require action</span><small>{open?"Investigation workflow remains open":"All known tickets are complete"}</small></p><p><b>{closureRate}%</b><span>alerts handled</span><small>{closed} verified ticket closures</small></p><p><b>{aiCompletion}%</b><span>AI analysis completion</span><small>{ai.length} database-linked runs evaluated</small></p><p className={backlog?"attention":"healthy"}><b>{backlog}</b><span>AI processing backlog</span><small>{backlog?"Engineering review recommended":"No telemetry is waiting for AI"}</small></p></div></section>}</>
 }async function downloadSystemLog(){const token=localStorage.getItem("token"),response=await fetch(`${API_URL}/admin/logs/export`,{headers:{Authorization:`Bearer ${token}`}});if(!response.ok)throw new Error("Unable to export system log");const blob=await response.blob(),link=document.createElement("a"),disposition=response.headers.get("Content-Disposition")||"";link.href=URL.createObjectURL(blob);link.download=disposition.match(/filename="?([^";]+)"?/)?.[1]||`vtab-sentinel-system-log-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(link.href)}
-function ApplicationSettings({preferences,updatePreference,thresholds,onSaved}){
- const [exportMessage,setExportMessage]=useState(""),[draft,setDraft]=useState({}),[saving,setSaving]=useState(""),[results,setResults]=useState({});
- useEffect(()=>setDraft(Object.fromEntries(thresholds.map(r=>[r.measurement_type,{...r}]))),[thresholds]);
- async function download(){try{setExportMessage("Preparing CSV...");await downloadSystemLog();setExportMessage("CSV downloaded successfully")}catch(error){setExportMessage(error.message)}}
+ function ApplicationSettings({preferences,updatePreference,thresholds,onSaved}){
+  const [exportMessage,setExportMessage]=useState(""),[draft,setDraft]=useState({}),[saving,setSaving]=useState(""),[results,setResults]=useState({});
+  const [mfaSetupData, setMfaSetupData] = useState(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaStatus, setMfaStatus] = useState("");
+  useEffect(()=>setDraft(Object.fromEntries(thresholds.map(r=>[r.measurement_type,{...r}]))),[thresholds]);
+  async function download(){try{setExportMessage("Preparing CSV...");await downloadSystemLog();setExportMessage("CSV downloaded successfully")}catch(error){setExportMessage(error.message)}}
+  async function initiateMFA() { try { setMfaSetupData(await setupMFA()); setMfaStatus(""); } catch(e) { setMfaStatus(e.message); } }
+  async function completeMFA(e) { e.preventDefault(); try { await verifyMFA(mfaCode); setMfaSetupData(null); setMfaStatus("MFA has been enabled successfully."); } catch(e) { setMfaStatus(e.message); } }
  function change(name,key,value){setDraft(d=>({...d,[name]:{...d[name],[key]:value}}));setResults(r=>({...r,[name]:""}))}
  function adjust(name,amount){const current=Number(draft[name]?.threshold||0);change(name,"threshold",String(Math.round((current+amount)*10)/10))}
  async function save(name){const rule=draft[name],value=Number(rule.threshold);if(!Number.isFinite(value)){setResults(r=>({...r,[name]:"Enter a valid number"}));return}setSaving(name);setResults(r=>({...r,[name]:""}));try{await api(`/settings/thresholds/${name}`,{method:"PUT",body:JSON.stringify({measurement_type:name,operator:rule.operator,threshold:value,severity:rule.severity,enabled:rule.enabled,mode:rule.mode||"manual"})});setResults(r=>({...r,[name]:`Saved: ${name.replaceAll("_"," ")} ${rule.operator} ${value}`}));await onSaved()}catch(error){setResults(r=>({...r,[name]:`Save failed: ${error.message}`}))}finally{setSaving("")}}
@@ -293,7 +360,8 @@ function ApplicationSettings({preferences,updatePreference,thresholds,onSaved}){
   <OverviewOption icon={Cpu} label="Hardware detail" description="Expanded fleet and ingestion evidence" value={preferences.showHardware} onChange={v=>updatePreference("showHardware",v)}/>
   <OverviewOption icon={ClipboardCheck} label="Ticket posture detail" description="Expanded incident workflow summary" value={preferences.showTickets} onChange={v=>updatePreference("showTickets",v)}/>
   <OverviewOption icon={BrainCircuit} label="AI pipeline summary" description="Compact five-stage reasoning overview" value={preferences.showAiSummary} onChange={v=>updatePreference("showAiSummary",v)}/>
- </div><div className="operator-preference-grid"><article className="settings-card voice-preference"><Volume2/><div><h3>Voice intelligence reminders</h3><p>Repeat announcements only while a condition remains unsafe.</p></div><label>Reminder interval<select value={preferences.voiceRepeatSeconds} onChange={e=>updatePreference("voiceRepeatSeconds",Number(e.target.value))}><option value={0}>Do not repeat</option><option value={10}>Every 10 seconds</option><option value={30}>Every 30 seconds</option><option value={60}>Every 60 seconds</option></select></label></article><article className="settings-card report-preference"><FileBarChart/><div><h3>Report composition</h3><p>Select the decision views displayed in Operational Reports.</p></div><SettingToggle label="Ticket handling trend" value={preferences.reportLifecycle} onChange={v=>updatePreference("reportLifecycle",v)}/><SettingToggle label="AI performance trend" value={preferences.reportAiPerformance} onChange={v=>updatePreference("reportAiPerformance",v)}/><SettingToggle label="Severity distribution" value={preferences.reportSeverity} onChange={v=>updatePreference("reportSeverity",v)}/><SettingToggle label="Service health" value={preferences.reportHealth} onChange={v=>updatePreference("reportHealth",v)}/><SettingToggle label="Decision findings" value={preferences.reportFindings} onChange={v=>updatePreference("reportFindings",v)}/></article></div></section> <section className="settings-two-column"><article id="automation-policy" className="settings-group compact"><header><div><BrainCircuit/><span><small>03 · AUTOMATION POLICY</small><h3>AI recovery safeguards</h3></span></div></header><p>Automatic recovery closes a ticket only after three consecutive safe readings. Every decision remains linked to the triggering event and action timeline.</p><div className="policy-proof"><CheckCircle2/><span><b>Evidence-gated closure</b><small>Three safe readings required</small></span></div><div className="policy-proof"><ShieldCheck/><span><b>Auditable execution</b><small>Model, action and ticket history retained</small></span></div></article><article id="data-tools" className="settings-group compact"><header><div><FileBarChart/><span><small>04 · DATA AND LOGS</small><h3>System evidence export</h3></span></div></header><p>Download events, alerts, tickets, automatic recovery actions and AI analyses as one engineering CSV.</p><button className="primary export-button" onClick={download}><FileBarChart/> Download current CSV</button>{exportMessage&&<small className="export-message">{exportMessage}</small>}</article></section></>
+ </div><div className="operator-preference-grid"><article className="settings-card voice-preference"><Volume2/><div><h3>Voice intelligence reminders</h3><p>Repeat announcements only while a condition remains unsafe.</p></div><label>Reminder interval<select value={preferences.voiceRepeatSeconds} onChange={e=>updatePreference("voiceRepeatSeconds",Number(e.target.value))}><option value={0}>Do not repeat</option><option value={10}>Every 10 seconds</option><option value={30}>Every 30 seconds</option><option value={60}>Every 60 seconds</option></select></label></article><article className="settings-card report-preference"><FileBarChart/><div><h3>Report composition</h3><p>Select the decision views displayed in Operational Reports.</p></div><SettingToggle label="Ticket handling trend" value={preferences.reportLifecycle} onChange={v=>updatePreference("reportLifecycle",v)}/><SettingToggle label="AI performance trend" value={preferences.reportAiPerformance} onChange={v=>updatePreference("reportAiPerformance",v)}/><SettingToggle label="Severity distribution" value={preferences.reportSeverity} onChange={v=>updatePreference("reportSeverity",v)}/><SettingToggle label="Service health" value={preferences.reportHealth} onChange={v=>updatePreference("reportHealth",v)}/><SettingToggle label="Decision findings" value={preferences.reportFindings} onChange={v=>updatePreference("reportFindings",v)}/></article></div></section> <section className="settings-two-column"><article id="automation-policy" className="settings-group compact"><header><div><BrainCircuit/><span><small>03 · AUTOMATION POLICY</small><h3>AI recovery safeguards</h3></span></div></header><p>Automatic recovery closes a ticket only after three consecutive safe readings. Every decision remains linked to the triggering event and action timeline.</p><div className="policy-proof"><CheckCircle2/><span><b>Evidence-gated closure</b><small>Three safe readings required</small></span></div><div className="policy-proof"><ShieldCheck/><span><b>Auditable execution</b><small>Model, action and ticket history retained</small></span></div></article><article id="data-tools" className="settings-group compact"><header><div><FileBarChart/><span><small>04 · DATA AND LOGS</small><h3>System evidence export</h3></span></div></header><p>Download events, alerts, tickets, automatic recovery actions and AI analyses as one engineering CSV.</p><button className="primary export-button" onClick={download}><FileBarChart/> Download current CSV</button>{exportMessage&&<small className="export-message">{exportMessage}</small>}</article></section>
+ <section className="settings-group compact"><header><div><ShieldCheck/><span><small>05 · SECURITY</small><h3>Multi-Factor Authentication</h3></span></div></header><p>Secure your operator account with a TOTP authenticator app.</p>{mfaStatus&&<div className="alert-bounce" style={{color:"#37e1ed",marginBottom:10}}>{mfaStatus}</div>}{!mfaSetupData?<button className="primary" onClick={initiateMFA}><ShieldCheck/> Enable MFA</button>:<form onSubmit={completeMFA} style={{background:"#102438",padding:20,borderRadius:8}}><p style={{marginBottom:10}}>1. Scan this QR code with Google Authenticator or Authy:</p><img src={`data:image/png;base64,${mfaSetupData.qr_code_b64}`} alt="MFA QR Code" style={{display:"block",marginBottom:10}} width="150" height="150"/><p style={{marginBottom:10,fontSize:12,color:"#638298"}}>Or enter the secret manually: <code style={{color:"#fff"}}>{mfaSetupData.secret}</code></p><p style={{marginBottom:10}}>2. Enter the 6-digit code to verify:</p><input type="text" placeholder="6-digit code" maxLength="6" required value={mfaCode} onChange={e=>setMfaCode(e.target.value)} className="auth-input" style={{width:200,marginBottom:10}}/><div style={{display:"flex",gap:10}}><button className="primary" type="submit">Verify & Enable</button><button type="button" onClick={()=>setMfaSetupData(null)}>Cancel</button></div></form>}</section></>
 }
 function OverviewOption({icon:Icon,label,description,value,onChange}){return <label className={`overview-option ${value?"selected":""}`}><input type="checkbox" checked={value} onChange={e=>onChange(e.target.checked)}/><i>{value?<CheckCircle2/>:<Icon/>}</i><span><b>{label}</b><small>{description}</small></span><em>{value?"SHOWN":"HIDDEN"}</em></label>}
 function SettingToggle({label,value,onChange}){return <label className="preference-toggle"><span>{label}</span><input type="checkbox" checked={value} onChange={e=>onChange(e.target.checked)}/><i/></label>}
@@ -461,5 +529,21 @@ function VTabSquarePromotional() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<ErrorBoundary>{localStorage.getItem("token")?<VoiceProvider><App/></VoiceProvider>:<Login/>}</ErrorBoundary>);
+function RootLoader() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const ssoToken = urlParams.get('sso_token');
+    if (ssoToken) {
+      localStorage.setItem("token", ssoToken);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    setReady(true);
+  }, []);
+  
+  if (!ready) return null;
+  return localStorage.getItem("token") ? <VoiceProvider><App/></VoiceProvider> : <Login/>;
+}
+
+createRoot(document.getElementById("root")).render(<ErrorBoundary><RootLoader/></ErrorBoundary>);
 

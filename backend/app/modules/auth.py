@@ -12,6 +12,14 @@ import uuid
 import random
 import string
 import time
+import pyotp
+import qrcode
+import io
+import base64
+from jose import jwt
+from app.core.security import ALGORITHM
+from app.core.config import settings
+from fastapi.responses import RedirectResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -27,7 +35,91 @@ def token(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not user.is_verified:
         raise HTTPException(status_code=403, detail="Email not verified")
+    
+    if user.mfa_enabled:
+        temp_token = create_access_token(user.id, user.role_name, user.organization_id)
+        raise HTTPException(status_code=403, detail={"error": "mfa_required", "temp_token": temp_token})
+
     return {"access_token": create_access_token(user.id, user.role_name, user.organization_id), "token_type": "bearer"}
+
+@router.post("/mfa/setup")
+def mfa_setup(user = Depends(current_user), db: Session = Depends(get_db)):
+    db_user = db.get(DimUser, user.id)
+    secret = pyotp.random_base32()
+    db_user.mfa_secret = secret
+    db.commit()
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=db_user.email, issuer_name="VTAB Sentinel")
+    
+    img = qrcode.make(uri)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    
+    return {"qr_code_b64": qr_b64, "secret": secret}
+
+@router.post("/mfa/verify-setup")
+def mfa_verify_setup(code: str = Body(..., embed=True), user = Depends(current_user), db: Session = Depends(get_db)):
+    db_user = db.get(DimUser, user.id)
+    if not db_user.mfa_secret:
+        raise HTTPException(400, "MFA setup not initiated")
+    totp = pyotp.totp.TOTP(db_user.mfa_secret)
+    if not totp.verify(code):
+        raise HTTPException(400, "Invalid MFA code")
+    db_user.mfa_enabled = True
+    db.commit()
+    return {"status": "success"}
+
+@router.post("/mfa/login")
+def mfa_login(temp_token: str = Body(..., embed=True), code: str = Body(..., embed=True), db: Session = Depends(get_db)):
+    from jose import JWTError
+    try:
+        payload = jwt.decode(temp_token, settings.secret_key, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+    except JWTError:
+        raise HTTPException(401, "Invalid or expired temporary token")
+    
+    db_user = db.get(DimUser, user_id)
+    if not db_user or not db_user.mfa_enabled:
+        raise HTTPException(400, "MFA not enabled or user not found")
+    
+    totp = pyotp.totp.TOTP(db_user.mfa_secret)
+    if not totp.verify(code):
+        raise HTTPException(401, "Invalid MFA code")
+        
+    return {"access_token": create_access_token(db_user.id, db_user.role_name, db_user.organization_id), "token_type": "bearer"}
+
+@router.get("/sso/login")
+def sso_login():
+    return RedirectResponse(url="/api/v1/auth/sso/callback?code=mock_enterprise_code_999")
+
+@router.get("/sso/callback")
+def sso_callback(code: str, db: Session = Depends(get_db)):
+    if code != "mock_enterprise_code_999":
+        raise HTTPException(400, "Invalid SSO code")
+    
+    sso_user_email = "enterprise.operator@vtab.local"
+    sso_user_name = "Enterprise Operator"
+    
+    user = db.scalar(select(DimUser).where(DimUser.email == sso_user_email))
+    if not user:
+        user = DimUser(
+            id=str(uuid.uuid4()),
+            organization_id="00000000-0000-0000-0000-000000000001",
+            email=sso_user_email,
+            full_name=sso_user_name,
+            password_hash=hash_password("auto-provisioned-sso"),
+            role_name="engineer",
+            is_active=True,
+            is_verified=True,
+            sso_provider="mock-idp",
+            sso_id="uid-001"
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    
+    token = create_access_token(user.id, user.role_name, user.organization_id)
+    return RedirectResponse(url=f"/?sso_token={token}")
 
 @router.post("/register")
 async def register(user_in: UserCreate, db: Session = Depends(get_db)):

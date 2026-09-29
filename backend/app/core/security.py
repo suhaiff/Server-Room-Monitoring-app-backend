@@ -37,8 +37,9 @@ def current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from exc
     
     # Inject RLS session variables
-    db.execute(text("SELECT set_config('app.current_user_id', :uid, true)").bindparams(uid=user_id))
-    db.execute(text("SELECT set_config('app.current_role', :role, true)").bindparams(role=role))
+    if db.bind.dialect.name == "postgresql":
+        db.execute(text("SELECT set_config('app.current_user_id', :uid, true)").bindparams(uid=user_id))
+        db.execute(text("SELECT set_config('app.current_role', :role, true)").bindparams(role=role))
     
     user = db.scalar(select(DimUser).where(DimUser.id == user_id, DimUser.is_active.is_(True)))
     if not user:

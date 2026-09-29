@@ -14,6 +14,14 @@ async def lifespan(_: FastAPI):
         with engine.begin() as connection:
             connection.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb"))
             connection.execute(text("SELECT create_hypertable('telemetry_details', 'measurement_timestamp', if_not_exists => TRUE, migrate_data => TRUE)"))
+            connection.execute(text("SELECT add_retention_policy('telemetry_details', INTERVAL '7 years', if_not_exists => TRUE)"))
+            try:
+                connection.execute(text("ALTER TABLE dim_users ADD COLUMN mfa_secret VARCHAR(64)"))
+                connection.execute(text("ALTER TABLE dim_users ADD COLUMN mfa_enabled BOOLEAN DEFAULT FALSE"))
+                connection.execute(text("ALTER TABLE dim_users ADD COLUMN sso_provider VARCHAR(50)"))
+                connection.execute(text("ALTER TABLE dim_users ADD COLUMN sso_id VARCHAR(255)"))
+            except Exception:
+                pass # Columns already exist
     yield
 
 app = FastAPI(title=settings.app_name, version="2.4.0", lifespan=lifespan)

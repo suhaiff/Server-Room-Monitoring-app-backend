@@ -54,6 +54,12 @@ class DimUser(UUIDMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     verification_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    
+    # MFA and SSO fields
+    mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    sso_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    sso_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 class DimRole(UUIDMixin, Base):
     __tablename__ = "dim_roles"
